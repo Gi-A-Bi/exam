@@ -4,6 +4,7 @@
   "description": "OMR 자동 채점 시스템 — 채점 로직 공용 모듈 및 골든마스터 회귀 테스트",
   "private": true,
   "scripts": {
-    "test": "node grading.goldenmaster.test.js"
+    "test": "node grading.goldenmaster.test.js",
+    "test:functions": "deno test --no-check supabase/functions/tests/"
   }
 }

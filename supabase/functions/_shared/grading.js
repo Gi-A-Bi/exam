@@ -2,16 +2,16 @@
 // CLAUDE.md §2-1 불변식: 아래 함수들의 입출력 동작은 기존 Code.gs와 비트 단위로 동일해야 합니다.
 // 새로 짜지 말고 그대로 이식 — 동작 변경 금지.
 //
-// Google Apps Script(전역 함수)와 Node(테스트용 module.exports) 양쪽에서 동작하도록
-// UMD 스타일로 노출합니다. GAS에서는 typeof module === 'undefined' 이므로 전역 함수로 남고,
-// Node에서는 module.exports 로 import 가능합니다.
+// ESM 모듈로 노출합니다. Supabase Edge Function(Deno)이 그대로 import 하고,
+// 골든마스터 테스트(Node)는 dynamic import 로 동일 모듈을 검증합니다.
+// 함수 본문은 기존 Code.gs 원본을 글자 그대로 이식한 것입니다 (로직 변경 없음).
 
-function normalize_(s) {
+export function normalize_(s) {
   if (s == null) return '';
   return String(s).trim().toLowerCase().replace(/\s+/g, '').replace(/[.,!?'"·]/g, '');
 }
 
-function levenshtein_(a, b) {
+export function levenshtein_(a, b) {
   if (a === b) return 0;
   if (!a.length) return b.length;
   if (!b.length) return a.length;
@@ -28,7 +28,7 @@ function levenshtein_(a, b) {
   return dp[a.length];
 }
 
-function isAmbiguous_(student, answers) {
+export function isAmbiguous_(student, answers) {
   if (!student || !answers || !answers.length) return false;
   var s = normalize_(student);
   if (!s) return false;
@@ -46,7 +46,7 @@ function isAmbiguous_(student, answers) {
   return false;
 }
 
-function gradeMcMulti_(correctArr, studentAns) {
+export function gradeMcMulti_(correctArr, studentAns) {
   var correctSet = (correctArr || []).map(Number).filter(function(v){ return v > 0; })
                                      .sort(function(a, b) { return a - b; });
   if (correctSet.length === 0) return false;
@@ -67,13 +67,13 @@ function gradeMcMulti_(correctArr, studentAns) {
   return true;
 }
 
-function toDisplay_(v) {
+export function toDisplay_(v) {
   if (v == null) return '';
   if (Array.isArray(v)) return v.join(',');
   return String(v);
 }
 
-function gradeSubmission_(exam, answers) {
+export function gradeSubmission_(exam, answers) {
   var questions = exam.questions || [];
   var ansMap = {};
   answers.forEach(function(a) { ansMap[a.q] = a.answer; });
@@ -121,16 +121,4 @@ function gradeSubmission_(exam, answers) {
   }
   var score = questions.length > 0 ? Math.round((correct / questions.length) * 100) : 0;
   return { count: questions.length, correct: correct, score: score, detail: detail };
-}
-
-// Node 환경에서만 export (GAS에서는 module 이 정의되어 있지 않아 전역 함수로 유지됨).
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = {
-    normalize_: normalize_,
-    levenshtein_: levenshtein_,
-    isAmbiguous_: isAmbiguous_,
-    gradeMcMulti_: gradeMcMulti_,
-    toDisplay_: toDisplay_,
-    gradeSubmission_: gradeSubmission_
-  };
 }

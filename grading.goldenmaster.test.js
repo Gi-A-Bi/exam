@@ -6,7 +6,12 @@
 // 실행: node grading.goldenmaster.test.js   (의존성 없음, Node 내장 assert만 사용)
 
 var assert = require('assert');
-var sep = require('./grading.js'); // 분리 후 모듈
+// 분리 후 모듈(ESM). Edge Function이 import 하는 바로 그 파일을 검증한다.
+// CommonJS 테스트에서 ESM 을 쓰기 위해 dynamic import 로 로드 후 실행한다.
+var path = require('path');
+var SEP_PATH = require('url').pathToFileURL(
+  path.join(__dirname, 'supabase', 'functions', '_shared', 'grading.js')
+).href;
 
 // =====================================================================
 // ORIGINAL — Code.gs 에서 그대로 복사한 분리 전 원본 함수 스냅샷.
@@ -246,40 +251,45 @@ function check(name, args, a, b) {
   }
 }
 
-NORMALIZE_INPUTS.forEach(function (x) {
-  check('normalize_', x, orig.normalize_(x), sep.normalize_(x));
-});
+import(SEP_PATH).then(function (sep) {
+  NORMALIZE_INPUTS.forEach(function (x) {
+    check('normalize_', x, orig.normalize_(x), sep.normalize_(x));
+  });
 
-LEVENSHTEIN_INPUTS.forEach(function (p) {
-  check('levenshtein_', p, orig.levenshtein_(p[0], p[1]), sep.levenshtein_(p[0], p[1]));
-});
+  LEVENSHTEIN_INPUTS.forEach(function (p) {
+    check('levenshtein_', p, orig.levenshtein_(p[0], p[1]), sep.levenshtein_(p[0], p[1]));
+  });
 
-ISAMBIGUOUS_INPUTS.forEach(function (p) {
-  check('isAmbiguous_', p, orig.isAmbiguous_(p[0], p[1]), sep.isAmbiguous_(p[0], p[1]));
-});
+  ISAMBIGUOUS_INPUTS.forEach(function (p) {
+    check('isAmbiguous_', p, orig.isAmbiguous_(p[0], p[1]), sep.isAmbiguous_(p[0], p[1]));
+  });
 
-GRADEMCMULTI_INPUTS.forEach(function (p) {
-  check('gradeMcMulti_', p, orig.gradeMcMulti_(p[0], p[1]), sep.gradeMcMulti_(p[0], p[1]));
-});
+  GRADEMCMULTI_INPUTS.forEach(function (p) {
+    check('gradeMcMulti_', p, orig.gradeMcMulti_(p[0], p[1]), sep.gradeMcMulti_(p[0], p[1]));
+  });
 
-TODISPLAY_INPUTS.forEach(function (x) {
-  check('toDisplay_', x, orig.toDisplay_(x), sep.toDisplay_(x));
-});
+  TODISPLAY_INPUTS.forEach(function (x) {
+    check('toDisplay_', x, orig.toDisplay_(x), sep.toDisplay_(x));
+  });
 
-SUBMISSIONS.forEach(function (sub, i) {
-  check('gradeSubmission_[' + i + ']', sub, orig.gradeSubmission_(EXAM, sub), sep.gradeSubmission_(EXAM, sub));
-});
-check('gradeSubmission_[empty-exam]', [], orig.gradeSubmission_(EMPTY_EXAM, []), sep.gradeSubmission_(EMPTY_EXAM, []));
+  SUBMISSIONS.forEach(function (sub, i) {
+    check('gradeSubmission_[' + i + ']', sub, orig.gradeSubmission_(EXAM, sub), sep.gradeSubmission_(EXAM, sub));
+  });
+  check('gradeSubmission_[empty-exam]', [], orig.gradeSubmission_(EMPTY_EXAM, []), sep.gradeSubmission_(EMPTY_EXAM, []));
 
-// =====================================================================
-// 결과 리포트
-// =====================================================================
-var total = passed + failures.length;
-if (failures.length === 0) {
-  console.log('✓ 골든마스터 통과: ' + total + '/' + total + ' 케이스 비트 단위 일치');
-  process.exit(0);
-} else {
-  console.error('✗ 골든마스터 실패: ' + failures.length + '/' + total + ' 케이스 불일치\n');
-  failures.forEach(function (f) { console.error('  • ' + f + '\n'); });
+  // ===================================================================
+  // 결과 리포트
+  // ===================================================================
+  var total = passed + failures.length;
+  if (failures.length === 0) {
+    console.log('✓ 골든마스터 통과: ' + total + '/' + total + ' 케이스 비트 단위 일치');
+    process.exit(0);
+  } else {
+    console.error('✗ 골든마스터 실패: ' + failures.length + '/' + total + ' 케이스 불일치\n');
+    failures.forEach(function (f) { console.error('  • ' + f + '\n'); });
+    process.exit(1);
+  }
+}).catch(function (e) {
+  console.error('✗ grading.js 로드 실패: ' + (e && e.message ? e.message : e));
   process.exit(1);
-}
+});

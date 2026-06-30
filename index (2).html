@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<base target="_top">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OMR 자동 채점 시스템</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", Roboto, sans-serif; background: #f7f7f5; color: #1a1a1a; margin: 0; padding: 16px; line-height: 1.5; }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  .role-pick { display: flex; gap: 12px; margin-bottom: 1rem; flex-wrap: wrap; }
+  .role-btn { flex: 1; min-width: 240px; padding: 1.5rem; background: #fff; border: 1px solid #e5e5e0; border-radius: 12px; cursor: pointer; text-align: left; font-family: inherit; transition: all 0.15s; }
+  .role-btn:hover { border-color: #1a1a1a; }
+  .role-icon { font-size: 28px; margin-bottom: 8px; display: block; }
+  .role-title { font-weight: 600; font-size: 15px; margin-bottom: 4px; color: #1a1a1a; }
+  .role-desc { font-size: 13px; color: #666; }
+  .banner { background: #e6f1fb; color: #0c447c; padding: 12px 16px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .banner code { background: rgba(0,0,0,0.08); padding: 3px 10px; border-radius: 4px; font-weight: 600; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 1.25rem; border-bottom: 1px solid #e5e5e0; flex-wrap: wrap; }
+  .tab { padding: 10px 16px; cursor: pointer; font-size: 14px; color: #666; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.15s; display: flex; align-items: center; gap: 5px; }
+  .tab.active { color: #1a1a1a; border-bottom-color: #1a1a1a; font-weight: 600; }
+  .tab:hover:not(.active) { color: #1a1a1a; }
+  .tab-badge { background: #faeed4; color: #854f0b; font-size: 10px; padding: 2px 6px; border-radius: 8px; font-weight: 600; margin-left: 2px; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .card { background: #fff; border: 1px solid #e5e5e0; border-radius: 12px; padding: 1.25rem; margin-bottom: 12px; }
+  .row { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  .row > * { flex: 1; min-width: 120px; }
+  .field-label { font-size: 12px; color: #666; display: block; margin-bottom: 4px; font-weight: 500; }
+  .btn-primary { background: #1a1a1a; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; cursor: pointer; font-family: inherit; font-weight: 500; }
+  .btn-primary:hover { background: #333; }
+  .btn-primary:disabled { background: #999; cursor: not-allowed; }
+  .btn-secondary { background: transparent; border: 1px solid #d0d0c8; padding: 8px 14px; border-radius: 8px; font-size: 13px; cursor: pointer; color: #1a1a1a; font-family: inherit; }
+  .btn-secondary:hover { background: #f0f0ed; }
+  .btn-danger { background: transparent; border: 1px solid #d0d0c8; color: #a32d2d; padding: 5px 12px; border-radius: 8px; font-size: 12px; cursor: pointer; font-family: inherit; }
+  .btn-danger:hover { background: #fcebeb; }
+  .btn-link { background: transparent; border: none; color: #0c447c; text-decoration: underline; cursor: pointer; font-size: 13px; font-family: inherit; padding: 4px 0; }
+  .answer-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .q-item { display: flex; gap: 10px; align-items: center; padding: 10px 12px; background: #f7f7f5; border-radius: 8px; flex-wrap: wrap; }
+  .q-item-num { font-size: 14px; font-weight: 600; min-width: 26px; color: #444; }
+  .q-type-toggle { display: flex; border: 1px solid #d5d5cd; border-radius: 8px; overflow: hidden; }
+  .q-type-toggle button { background: #fff; border: none; padding: 5px 12px; font-size: 12px; cursor: pointer; color: #666; font-family: inherit; }
+  .q-type-toggle button.active { background: #1a1a1a; color: #fff; }
+  .bubble-row { display: flex; gap: 6px; flex: 1; min-width: 160px; }
+  .bubble { width: 32px; height: 32px; border-radius: 50%; border: 1.5px solid #c5c5bd; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 13px; color: #555; background: #fff; transition: all 0.1s; user-select: none; font-weight: 500; }
+  .bubble:hover { border-color: #1a1a1a; }
+  .bubble.selected { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+  .short-input { flex: 1; min-width: 160px; padding: 8px 10px; border: 1px solid #d5d5cd; border-radius: 8px; font-size: 13px; background: #fff; color: #1a1a1a; font-family: inherit; }
+  .short-input:focus { outline: none; border-color: #1a1a1a; }
+  .answer-key-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; background: #f7f7f5; border-radius: 8px; margin-bottom: 8px; font-size: 13px; gap: 8px; }
+  .ak-info { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+  .ak-title { font-weight: 600; }
+  .ak-sub { font-size: 12px; color: #666; }
+  .result-row { display: grid; grid-template-columns: 1fr 0.8fr 1fr 0.6fr 0.6fr 0.5fr; gap: 8px; align-items: center; padding: 10px 14px; background: #f7f7f5; border-radius: 8px; margin-bottom: 6px; font-size: 13px; }
+  .result-header { font-weight: 600; font-size: 12px; color: #666; background: transparent; padding: 6px 14px; margin-bottom: 0; }
+  .score-badge { background: #eaf3de; color: #3b6d11; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; text-align: center; display: inline-block; }
+  .score-badge.mid { background: #faeed4; color: #854f0b; }
+  .score-badge.low { background: #fcebeb; color: #a32d2d; }
+  .review-flag { background: #faeed4; color: #854f0b; font-size: 11px; padding: 3px 7px; border-radius: 4px; font-weight: 500; }
+  .empty { text-align: center; color: #999; padding: 2rem; font-size: 13px; }
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-bottom: 12px; }
+  .stat-card { background: #f7f7f5; border-radius: 8px; padding: 12px 14px; }
+  .stat-label { font-size: 11px; color: #666; margin-bottom: 4px; font-weight: 500; }
+  .stat-value { font-size: 20px; font-weight: 600; color: #1a1a1a; }
+  .msg { padding: 12px 14px; border-radius: 8px; margin-top: 10px; font-size: 13px; }
+  .msg.success { background: #eaf3de; color: #3b6d11; }
+  .msg.error { background: #fcebeb; color: #a32d2d; }
+  .msg.info { background: #e6f1fb; color: #0c447c; }
+  select, input[type="text"], input[type="number"], input[type="password"] { width: 100%; padding: 10px 12px; border: 1px solid #d5d5cd; border-radius: 8px; font-size: 14px; background: #fff; color: #1a1a1a; font-family: inherit; }
+  select:focus, input:focus { outline: none; border-color: #1a1a1a; }
+  .section-title { font-size: 15px; font-weight: 600; margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px; }
+  .filter-row { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; }
+  .filter-row select { flex: 1; min-width: 100px; }
+  .question-detail { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+  .q-pill { font-size: 11px; padding: 4px 8px; border-radius: 6px; font-weight: 500; display: inline-flex; align-items: center; gap: 4px; }
+  .q-pill.correct { background: #eaf3de; color: #3b6d11; }
+  .q-pill.wrong { background: #fcebeb; color: #a32d2d; }
+  .q-pill.review { background: #faeed4; color: #854f0b; box-shadow: 0 0 0 1px #ef9f27; }
+  .q-pill.pending { background: #e6f1fb; color: #0c447c; }
+  .q-pill .toggle-btn { background: rgba(0,0,0,0.1); border: none; padding: 2px 6px; border-radius: 3px; font-size: 10px; cursor: pointer; color: inherit; font-family: inherit; font-weight: 600; }
+  .loading { text-align: center; padding: 1.5rem; color: #999; font-size: 13px; }
+  .hint-text { font-size: 12px; color: #888; margin-top: 6px; line-height: 1.5; }
+  .header-info { background: #e6f1fb; color: #0c447c; padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
+  .filter-toggle { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #666; cursor: pointer; padding: 8px 12px; border: 1px solid #d5d5cd; border-radius: 8px; user-select: none; }
+  .filter-toggle.active { background: #faeed4; color: #854f0b; border-color: #ef9f27; }
+  .filter-toggle input { display: none; }
+  .big-score { font-size: 48px; font-weight: 700; text-align: center; margin: 8px 0; }
+  .big-score.high { color: #3b6d11; }
+  .big-score.mid { color: #854f0b; }
+  .big-score.low { color: #a32d2d; }
+  .score-sub { text-align: center; color: #666; font-size: 14px; margin-bottom: 16px; }
+  .type-badge { font-size: 10px; padding: 3px 7px; border-radius: 4px; background: #e5e5e0; color: #555; font-weight: 500; }
+  .breakdown-row { display: grid; grid-template-columns: 1.5fr 1fr 0.6fr; gap: 10px; padding: 10px 14px; font-size: 12px; align-items: center; border-bottom: 1px solid #f0f0ed; }
+  .breakdown-row:last-child { border-bottom: none; }
+  .bar-bg { height: 8px; background: #f0f0ed; border-radius: 4px; overflow: hidden; }
+  .bar-fill { height: 100%; background: #1a1a1a; border-radius: 4px; transition: width 0.3s; }
+  .wrong-q-item { display: flex; justify-content: space-between; align-items: center; padding: 7px 11px; background: #f7f7f5; border-radius: 6px; margin-bottom: 5px; font-size: 12px; }
+  .wrong-bar { display: inline-block; height: 6px; background: #f09595; border-radius: 3px; vertical-align: middle; margin-right: 6px; }
+  .trend-chart { width: 100%; height: 150px; margin: 8px 0; }
+  h1 { font-size: 22px; margin: 0 0 4px 0; }
+  h1 small { font-size: 13px; font-weight: 400; color: #666; margin-left: 8px; }
+  code { font-family: "SF Mono", Monaco, monospace; background: rgba(0,0,0,0.06); padding: 1px 6px; border-radius: 3px; font-size: 12px; }
+  .dev-footer { text-align: center; margin-top: 2rem; padding: 1rem 0; font-size: 11px; color: #999; border-top: 1px solid #e5e5e0; }
+  .dev-footer strong { color: #666; font-weight: 500; }
+  .dev-footer a { color: #888; text-decoration: none; }
+  .dev-footer a:hover { color: #0c447c; text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- ============ 역할 선택 ============ -->
+<div id="role-screen">
+  <div class="card" style="background:#f7f7f5;border:none">
+    <h1>📝 OMR 자동 채점 시스템 <small>v5.0</small></h1>
+    <p id="school-name-display" style="font-size:14px;color:#666;margin:0">불러오는 중...</p>
+  </div>
+  <div class="role-pick">
+    <button class="role-btn" data-role="teacher" type="button">
+      <span class="role-icon">👨‍🏫</span>
+      <div class="role-title">선생님으로 시작</div>
+      <div class="role-desc">정답지 등록 / 응시 결과 확인</div>
+    </button>
+    <button class="role-btn" data-role="student" type="button">
+      <span class="role-icon">✏️</span>
+      <div class="role-title">학생으로 응시</div>
+      <div class="role-desc">선생님 코드 입력 후 시험 응시</div>
+    </button>
+  </div>
+</div>
+
+<!-- ============ 선생님 로그인 ============ -->
+<div id="teacher-login" style="display:none">
+  <div class="card">
+    <p class="section-title">👨‍🏫 선생님 로그인</p>
+    <div class="row">
+      <div>
+        <label class="field-label">내 코드 (예: KIM01)</label>
+        <input type="text" id="login-code" placeholder="영문/숫자" autocomplete="off" />
+      </div>
+      <div>
+        <label class="field-label">비밀번호</label>
+        <input type="password" id="login-pw" placeholder="비밀번호" autocomplete="off" />
+      </div>
+    </div>
+    <div style="margin-top:12px">
+      <button class="btn-primary" id="login-btn" type="button">로그인</button>
+      <button class="btn-secondary" id="login-back" type="button" style="margin-left:6px">뒤로</button>
+      <button class="btn-link" id="show-register" type="button" style="margin-left:8px">처음이세요? 가입하기</button>
+    </div>
+    <div id="login-msg"></div>
+  </div>
+</div>
+
+<!-- ============ 선생님 가입 ============ -->
+<div id="teacher-register" style="display:none">
+  <div class="card">
+    <p class="section-title">👨‍🏫 선생님 가입</p>
+    <p class="hint-text" style="margin-bottom:12px">학교 가입코드는 관리 선생님에게 문의하세요.</p>
+    <div class="row">
+      <div>
+        <label class="field-label">학교 가입코드</label>
+        <input type="text" id="reg-joincode" placeholder="관리 선생님에게 받은 코드" autocomplete="off" />
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label class="field-label">선생님 이름</label>
+        <input type="text" id="reg-name" placeholder="예: 김민성" autocomplete="off" />
+      </div>
+      <div>
+        <label class="field-label">내 코드 (학생에게 알려줄 코드)</label>
+        <input type="text" id="reg-code" placeholder="예: KIM01" autocomplete="off" />
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label class="field-label">비밀번호 (6자 이상)</label>
+        <input type="password" id="reg-pw" placeholder="비밀번호" autocomplete="off" />
+      </div>
+      <div>
+        <label class="field-label">비밀번호 확인</label>
+        <input type="password" id="reg-pw2" placeholder="비밀번호 다시" autocomplete="off" />
+      </div>
+    </div>
+    <p class="hint-text">팁: 본인 코드는 학생들에게 알려줄 응시 코드예요. 짧고 외우기 쉬운 걸로 만드세요. 예: <code>KIM01</code>, <code>SCIENCE3</code></p>
+    <div style="margin-top:12px">
+      <button class="btn-primary" id="reg-btn" type="button">가입하기</button>
+      <button class="btn-secondary" id="reg-back" type="button" style="margin-left:6px">뒤로</button>
+    </div>
+    <div id="reg-msg"></div>
+  </div>
+</div>
+
+<!-- ============ 학생 코드 입력 ============ -->
+<div id="student-login" style="display:none">
+  <div class="card">
+    <p class="section-title">✏️ 학생 응시</p>
+    <p class="hint-text" style="margin-bottom:12px">선생님이 알려주신 코드를 입력하세요.</p>
+    <div class="row">
+      <div>
+        <label class="field-label">선생님 코드</label>
+        <input type="text" id="stu-code" placeholder="예: KIM01" autocomplete="off" />
+      </div>
+      <div>
+        <label class="field-label">본인 이름</label>
+        <input type="text" id="stu-name" placeholder="이름 입력" autocomplete="off" />
+      </div>
+    </div>
+    <div style="margin-top:12px">
+      <button class="btn-primary" id="stu-enter" type="button">입장</button>
+      <button class="btn-secondary" id="stu-back" type="button" style="margin-left:6px">뒤로</button>
+    </div>
+    <div id="stu-msg"></div>
+  </div>
+</div>
+
+<!-- ============ 선생님 메인 ============ -->
+<div id="teacher-main" style="display:none">
+  <div class="banner">
+    <div>👨‍🏫 <strong id="tn-display"></strong> 선생님 · 학생 응시 코드: <code id="tc-display"></code></div>
+    <button class="btn-secondary" id="logout-btn" type="button">로그아웃</button>
+  </div>
+  <div class="tabs">
+    <div class="tab active" data-tab="teacher">📚 정답지 관리</div>
+    <div class="tab" data-tab="results">📋 응시 결과<span class="tab-badge" id="review-badge" style="display:none">0</span></div>
+    <div class="tab" data-tab="analytics">📊 학생별 분석</div>
+  </div>
+
+  <div class="panel active" id="panel-teacher">
+    <div class="card">
+      <p class="section-title">➕ 새 정답지 등록</p>
+      <div class="row">
+        <div><label class="field-label">과목</label><input type="text" id="new-subject" placeholder="예: 수학" /></div>
+        <div><label class="field-label">단원</label><input type="text" id="new-unit" placeholder="예: 3단원 도형" /></div>
+        <div style="max-width:110px;flex:0 0 110px"><label class="field-label">문항 수</label><input type="number" id="new-count" min="1" max="100" value="10" /></div>
+        <div style="max-width:120px;flex:0 0 120px"><label class="field-label">기본 선택지</label><select id="new-choices"><option value="3">3지선다</option><option value="4">4지선다</option><option value="5" selected>5지선다</option></select></div>
+      </div>
+      <p class="hint-text">각 문항 객관식/주관식 선택. 주관식 복수 정답은 쉼표(,) 구분. 예: <code>4, 사, 넷</code></p>
+      <div id="answer-input-area"></div>
+      <button class="btn-primary" id="save-key-btn" type="button" style="margin-top:12px">정답지 저장</button>
+      <div id="save-result"></div>
+    </div>
+    <div class="card">
+      <p class="section-title">📂 저장된 정답지</p>
+      <div id="answer-keys-list"><div class="loading">불러오는 중...</div></div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-results">
+    <div class="card">
+      <p class="section-title">📊 전체 통계</p>
+      <div class="stat-grid" id="stats-grid"></div>
+      <div class="filter-row">
+        <select id="filter-subject"><option value="">전체 과목</option></select>
+        <select id="filter-unit"><option value="">전체 단원</option></select>
+        <select id="filter-name"><option value="">전체 학생</option></select>
+        <label class="filter-toggle" id="filter-review-label"><input type="checkbox" id="filter-review" />⚠ 검토 필요만</label>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <span style="font-size:12px;color:#666" id="result-count">0건</span>
+        <div>
+          <button class="btn-secondary" id="refresh-results" type="button">새로고침</button>
+          <button class="btn-secondary" id="export-csv" type="button" style="margin-left:6px">CSV 내보내기</button>
+        </div>
+      </div>
+      <div id="results-list"><div class="loading">불러오는 중...</div></div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-analytics">
+    <div class="card">
+      <p class="section-title">👥 학생 선택</p>
+      <select id="analytics-student"><option value="">학생을 선택하세요</option></select>
+    </div>
+    <div id="analytics-content"></div>
+  </div>
+</div>
+
+<!-- ============ 학생 메인 ============ -->
+<div id="student-main" style="display:none">
+  <div class="banner">
+    <div>✏️ <strong id="stu-name-display"></strong> 학생 · 응시 코드: <code id="stu-code-display"></code></div>
+    <button class="btn-secondary" id="stu-logout" type="button">로그아웃</button>
+  </div>
+  <div class="card" id="stu-exam-card">
+    <p class="section-title">📋 시험 선택</p>
+    <select id="stu-exam-select"><option value="">불러오는 중...</option></select>
+  </div>
+  <div class="card" id="omr-card" style="display:none">
+    <p class="section-title">✅ 답안지</p>
+    <div class="answer-list" id="omr-grid"></div>
+    <button class="btn-primary" id="submit-btn" type="button" style="margin-top:12px">답안 제출 & 채점</button>
+    <button class="btn-secondary" id="cancel-btn" type="button" style="margin-top:12px;margin-left:6px">시험 변경</button>
+    <div id="submit-msg"></div>
+  </div>
+  <div id="result-area" style="display:none"></div>
+</div>
+
+<div class="dev-footer">
+  © OMR 자동 채점 시스템 · 개발: <strong>김민성</strong> · 오류 문의: <a href="mailto:healthydol@gmail.com">healthydol@gmail.com</a>
+</div>
+
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // Apps Script가 서빙할 때 자동 주입
+  const BACKEND_URL = "<?= backendUrl ?>";
+  const SCHOOL_NAME = "<?= schoolName ?>";
+
+  const $ = (sel) => document.querySelector(sel);
+  const $$ = (sel) => document.querySelectorAll(sel);
+
+  let session = {
+    role: null,
+    token: null,
+    teacherCode: null,
+    teacherName: null,
+    studentName: null,
+    studentTeacherCode: null,
+    studentTeacherName: null
+  };
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // ===== API 호출 =====
+  async function callApi(payload) {
+    if (session.token) payload.token = session.token;
+    const r = await fetch(BACKEND_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+      redirect: 'follow'
+    });
+    if (!r.ok) throw new Error('네트워크 오류 (' + r.status + ')');
+    const json = await r.json();
+    if (!json.ok) {
+      if (json.authRequired) {
+        // 토큰 만료
+        session = {};
+        showScreen('role-screen');
+      }
+      throw new Error(json.error || '알 수 없는 오류');
+    }
+    return json;
+  }
+
+  // ===== 화면 전환 =====
+  function showScreen(id) {
+    ['role-screen','teacher-login','teacher-register','student-login','teacher-main','student-main'].forEach(s => {
+      const el = document.getElementById(s);
+      if (el) el.style.display = (s === id ? '' : 'none');
+    });
+  }
+
+  // 학교 이름 표시
+  $('#school-name-display').textContent = SCHOOL_NAME ? (SCHOOL_NAME + ' 시험 응시/채점 시스템') : '시험 응시/채점 시스템';
+
+  // 역할 선택
+  document.addEventListener('click', function(e) {
+    const roleBtn = e.target.closest('.role-btn');
+    if (roleBtn) {
+      if (roleBtn.dataset.role === 'teacher') showScreen('teacher-login');
+      else if (roleBtn.dataset.role === 'student') showScreen('student-login');
+    }
+  });
+
+  $('#login-back').addEventListener('click', () => showScreen('role-screen'));
+  $('#reg-back').addEventListener('click', () => showScreen('role-screen'));
+  $('#stu-back').addEventListener('click', () => showScreen('role-screen'));
+  $('#show-register').addEventListener('click', () => showScreen('teacher-register'));
+  $('#logout-btn').addEventListener('click', () => { session = {}; showScreen('role-screen'); });
+  $('#stu-logout').addEventListener('click', () => { session = {}; showScreen('role-screen'); });
+
+  // ===== 선생님 로그인 =====
+  $('#login-btn').addEventListener('click', async () => {
+    const code = $('#login-code').value.trim();
+    const pw = $('#login-pw').value;
+    if (!code || !pw) { $('#login-msg').innerHTML = '<div class="msg error">코드와 비밀번호를 입력해주세요.</div>'; return; }
+    const btn = $('#login-btn');
+    btn.disabled = true; btn.textContent = '로그인 중...';
+    try {
+      const r = await callApi({ action: 'login_teacher', data: { code, password: pw } });
+      session.role = 'teacher';
+      session.token = r.data.token;
+      session.teacherCode = r.data.code;
+      session.teacherName = r.data.name;
+      $('#tn-display').textContent = session.teacherName;
+      $('#tc-display').textContent = session.teacherCode;
+      $('#login-code').value = ''; $('#login-pw').value = '';
+      showScreen('teacher-main');
+      loadAnswerKeys();
+      loadAllSubmissions();
+    } catch (e) {
+      $('#login-msg').innerHTML = `<div class="msg error">${escapeHtml(e.message)}</div>`;
+    } finally {
+      btn.disabled = false; btn.textContent = '로그인';
+    }
+  });
+  ['#login-code','#login-pw'].forEach(s => $(s).addEventListener('keypress', e => { if (e.key === 'Enter') $('#login-btn').click(); }));
+
+  // ===== 선생님 가입 =====
+  $('#reg-btn').addEventListener('click', async () => {
+    const joinCode = $('#reg-joincode').value.trim();
+    const name = $('#reg-name').value.trim();
+    const code = $('#reg-code').value.trim();
+    const pw = $('#reg-pw').value;
+    const pw2 = $('#reg-pw2').value;
+    if (!joinCode) { $('#reg-msg').innerHTML = '<div class="msg error">학교 가입코드를 입력해주세요.</div>'; return; }
+    if (!name || !code) { $('#reg-msg').innerHTML = '<div class="msg error">이름과 코드를 입력해주세요.</div>'; return; }
+    if (pw.length < 6) { $('#reg-msg').innerHTML = '<div class="msg error">비밀번호는 6자 이상이어야 합니다.</div>'; return; }
+    if (pw !== pw2) { $('#reg-msg').innerHTML = '<div class="msg error">비밀번호 확인이 일치하지 않습니다.</div>'; return; }
+    const btn = $('#reg-btn');
+    btn.disabled = true; btn.textContent = '가입 중...';
+    try {
+      const r = await callApi({ action: 'register_teacher', data: { joinCode, name, code, password: pw } });
+      session.role = 'teacher';
+      session.token = r.data.token;
+      session.teacherCode = r.data.code;
+      session.teacherName = r.data.name;
+      $('#tn-display').textContent = session.teacherName;
+      $('#tc-display').textContent = session.teacherCode;
+      ['#reg-joincode','#reg-name','#reg-code','#reg-pw','#reg-pw2'].forEach(s => $(s).value = '');
+      showScreen('teacher-main');
+      loadAnswerKeys();
+      loadAllSubmissions();
+    } catch (e) {
+      $('#reg-msg').innerHTML = `<div class="msg error">${escapeHtml(e.message)}</div>`;
+    } finally {
+      btn.disabled = false; btn.textContent = '가입하기';
+    }
+  });
+
+  // ===== 학생 입장 =====
+  $('#stu-enter').addEventListener('click', async () => {
+    const code = $('#stu-code').value.trim();
+    const name = $('#stu-name').value.trim();
+    if (!code || !name) { $('#stu-msg').innerHTML = '<div class="msg error">코드와 이름을 입력해주세요.</div>'; return; }
+    const btn = $('#stu-enter');
+    btn.disabled = true; btn.textContent = '확인 중...';
+    try {
+      const r = await callApi({ action: 'check_teacher_exists', data: { code } });
+      session.role = 'student';
+      session.studentName = name;
+      session.studentTeacherCode = r.data.code;
+      session.studentTeacherName = r.data.name;
+      $('#stu-name-display').textContent = name;
+      $('#stu-code-display').textContent = r.data.code + ' (' + r.data.name + ' 선생님)';
+      $('#stu-code').value = ''; $('#stu-name').value = '';
+      $('#result-area').style.display = 'none';
+      $('#stu-exam-card').style.display = '';
+      $('#omr-card').style.display = 'none';
+      showScreen('student-main');
+      await loadStudentExams();
+    } catch (e) {
+      $('#stu-msg').innerHTML = `<div class="msg error">${escapeHtml(e.message)}</div>`;
+    } finally {
+      btn.disabled = false; btn.textContent = '입장';
+    }
+  });
+  ['#stu-code','#stu-name'].forEach(s => $(s).addEventListener('keypress', e => { if (e.key === 'Enter') $('#stu-enter').click(); }));
+
+  // ===== 탭 전환 =====
+  document.addEventListener('click', function(e) {
+    const tab = e.target.closest('.tab');
+    if (tab && tab.dataset.tab) {
+      const container = tab.closest('#teacher-main, #student-main');
+      if (!container) return;
+      container.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      container.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      const p = document.getElementById('panel-' + tab.dataset.tab);
+      if (p) p.classList.add('active');
+      if (tab.dataset.tab === 'results') loadAllSubmissions();
+      if (tab.dataset.tab === 'analytics') loadAnalytics();
+      if (tab.dataset.tab === 'teacher') loadAnswerKeys();
+    }
+  });
+
+  // ===== 정답지 입력 =====
+  let questionTypes = {};
+  function renderAnswerInputs() {
+    const count = parseInt($('#new-count').value) || 10;
+    const choices = parseInt($('#new-choices').value) || 5;
+    const area = $('#answer-input-area');
+    area.innerHTML = '<label class="field-label" style="margin-top:10px">각 문항 정답</label><div class="answer-list" id="answer-input-grid"></div>';
+    const grid = $('#answer-input-grid');
+    const choiceArr = Array.from({length: choices}, (_, i) => i + 1);
+
+    for (let i = 1; i <= count; i++) {
+      if (!questionTypes[i]) questionTypes[i] = 'mc';
+      const item = document.createElement('div');
+      item.className = 'q-item';
+      item.dataset.q = i;
+
+      const numSpan = document.createElement('span');
+      numSpan.className = 'q-item-num';
+      numSpan.textContent = i;
+      item.appendChild(numSpan);
+
+      const toggle = document.createElement('div');
+      toggle.className = 'q-type-toggle';
+      const mcBtn = document.createElement('button');
+      mcBtn.type = 'button'; mcBtn.dataset.type = 'mc'; mcBtn.textContent = '객관식';
+      if (questionTypes[i] === 'mc') mcBtn.classList.add('active');
+      const mcMultiBtn = document.createElement('button');
+      mcMultiBtn.type = 'button'; mcMultiBtn.dataset.type = 'mc_multi'; mcMultiBtn.textContent = '복수정답';
+      if (questionTypes[i] === 'mc_multi') mcMultiBtn.classList.add('active');
+      const shortBtn = document.createElement('button');
+      shortBtn.type = 'button'; shortBtn.dataset.type = 'short'; shortBtn.textContent = '주관식';
+      if (questionTypes[i] === 'short') shortBtn.classList.add('active');
+      toggle.appendChild(mcBtn); toggle.appendChild(mcMultiBtn); toggle.appendChild(shortBtn);
+      item.appendChild(toggle);
+
+      const inputArea = document.createElement('div');
+      inputArea.style.cssText = 'flex:1;display:flex;gap:4px;align-items:center;min-width:160px';
+      item.appendChild(inputArea);
+
+      grid.appendChild(item);
+      renderQInput(inputArea, i, questionTypes[i], choiceArr, 'key');
+
+      function setActiveType(type) {
+        questionTypes[i] = type;
+        [mcBtn, mcMultiBtn, shortBtn].forEach(b => b.classList.toggle('active', b.dataset.type === type));
+        renderQInput(inputArea, i, type, choiceArr, 'key');
+      }
+      mcBtn.addEventListener('click', () => setActiveType('mc'));
+      mcMultiBtn.addEventListener('click', () => setActiveType('mc_multi'));
+      shortBtn.addEventListener('click', () => setActiveType('short'));
+    }
+  }
+
+  function renderQInput(area, qNum, type, choiceArr, ctx) {
+    area.innerHTML = '';
+    var isMulti = (type === 'mc_multi');
+    if (type === 'mc' || type === 'mc_multi') {
+      if (isMulti && ctx === 'key') {
+        const hint = document.createElement('span');
+        hint.style.cssText = 'font-size:10px;color:#854f0b;margin-right:4px';
+        hint.textContent = '(복수선택)';
+        area.appendChild(hint);
+      }
+      if (isMulti && ctx === 'student') {
+        const hint = document.createElement('span');
+        hint.style.cssText = 'font-size:10px;color:#854f0b;margin-right:4px';
+        hint.textContent = '(여러 개)';
+        area.appendChild(hint);
+      }
+      const row = document.createElement('div');
+      row.className = 'bubble-row';
+      choiceArr.forEach(n => {
+        const b = document.createElement('div');
+        b.className = 'bubble';
+        b.dataset.q = qNum;
+        b.dataset.v = n;
+        b.textContent = n;
+        b.addEventListener('click', function() {
+          if (isMulti) {
+            // 복수정답: 토글 방식
+            b.classList.toggle('selected');
+          } else {
+            // 단일정답: 기존 방식
+            row.querySelectorAll('.bubble').forEach(x => x.classList.remove('selected'));
+            b.classList.add('selected');
+          }
+        });
+        row.appendChild(b);
+      });
+      area.appendChild(row);
+    } else {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'short-input';
+      input.dataset.q = qNum;
+      input.placeholder = ctx === 'key' ? '정답 (복수: 4, 사, 넷)' : '답을 입력하세요';
+      area.appendChild(input);
+    }
+  }
+
+  $('#new-count').addEventListener('input', () => { questionTypes = {}; renderAnswerInputs(); });
+  $('#new-choices').addEventListener('change', renderAnswerInputs);
+
+  $('#save-key-btn').addEventListener('click', async () => {
+    const subject = $('#new-subject').value.trim();
+    const unit = $('#new-unit').value.trim();
+    const count = parseInt($('#new-count').value);
+    const choices = parseInt($('#new-choices').value);
+    if (!subject || !unit) { $('#save-result').innerHTML = '<div class="msg error">과목과 단원을 입력해주세요.</div>'; return; }
+
+    const questions = [];
+    const grid = $('#answer-input-grid');
+    for (let i = 1; i <= count; i++) {
+      const type = questionTypes[i] || 'mc';
+      const qItem = grid.querySelector(`.q-item[data-q="${i}"]`);
+      if (type === 'mc') {
+        const sel = qItem.querySelector('.bubble.selected');
+        if (!sel) { $('#save-result').innerHTML = `<div class="msg error">${i}번 객관식 정답을 선택해주세요.</div>`; return; }
+        questions.push({ q: i, type: 'mc', answer: parseInt(sel.dataset.v) });
+      } else if (type === 'mc_multi') {
+        const sels = qItem.querySelectorAll('.bubble.selected');
+        if (sels.length < 2) { $('#save-result').innerHTML = `<div class="msg error">${i}번 복수정답은 2개 이상 선택해주세요.</div>`; return; }
+        const answers = Array.from(sels).map(s => parseInt(s.dataset.v));
+        questions.push({ q: i, type: 'mc', multi: true, answers: answers });
+      } else {
+        const input = qItem.querySelector('.short-input');
+        const val = (input?.value || '').trim();
+        if (!val) { $('#save-result').innerHTML = `<div class="msg error">${i}번 주관식 정답을 입력해주세요.</div>`; return; }
+        questions.push({ q: i, type: 'short', answers: val.split(',').map(s => s.trim()).filter(Boolean) });
+      }
+    }
+    const btn = $('#save-key-btn');
+    btn.disabled = true; btn.textContent = '저장 중...';
+    try {
+      await callApi({ action: 'add_exam', data: { subject, unit, choices, questions } });
+      $('#save-result').innerHTML = '<div class="msg success">정답지가 저장되었습니다.</div>';
+      $('#new-subject').value = ''; $('#new-unit').value = '';
+      questionTypes = {}; renderAnswerInputs();
+      loadAnswerKeys();
+      setTimeout(() => { $('#save-result').innerHTML = ''; }, 2500);
+    } catch (e) {
+      $('#save-result').innerHTML = `<div class="msg error">${escapeHtml(e.message)}</div>`;
+    } finally {
+      btn.disabled = false; btn.textContent = '정답지 저장';
+    }
+  });
+
+  async function loadAnswerKeys() {
+    const el = $('#answer-keys-list');
+    el.innerHTML = '<div class="loading">불러오는 중...</div>';
+    try {
+      const r = await callApi({ action: 'list_exams' });
+      const items = r.data || [];
+      if (items.length === 0) { el.innerHTML = '<div class="empty">저장된 정답지가 없습니다.</div>'; return; }
+      items.sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+      el.innerHTML = items.map(it => {
+        const qs = it.questions || [];
+        const mcCount = qs.filter(q => q.type === 'mc' && !q.multi).length;
+        const mcMultiCount = qs.filter(q => q.type === 'mc' && q.multi).length;
+        const shortCount = qs.filter(q => q.type === 'short').length;
+        const typeParts = [];
+        if (mcCount > 0) typeParts.push(`객관식 ${mcCount}`);
+        if (mcMultiCount > 0) typeParts.push(`복수정답 ${mcMultiCount}`);
+        if (shortCount > 0) typeParts.push(`주관식 ${shortCount}`);
+        const typeSum = typeParts.join(' · ');
+        const answersStr = qs.map(q => q.type === 'mc' && q.multi ? '[' + (q.answers||[]).join(',') + ']' : q.type === 'mc' ? q.answer : (q.answers || []).join('/')).join(', ');
+        return `<div class="answer-key-item">
+          <div class="ak-info">
+            <span class="ak-title">${escapeHtml(it.subject)} · ${escapeHtml(it.unit)}</span>
+            <span class="ak-sub">${it.count}문항 · ${typeSum}</span>
+            <span class="ak-sub" style="font-size:11px">정답: ${escapeHtml(answersStr)}</span>
+          </div>
+          <button class="btn-danger" data-del="${escapeHtml(it.id)}" type="button">삭제</button>
+        </div>`;
+      }).join('');
+      el.querySelectorAll('[data-del]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('이 정답지를 삭제하시겠어요?')) return;
+          try {
+            await callApi({ action: 'delete_exam', id: btn.dataset.del });
+            loadAnswerKeys();
+          } catch (e) { alert('삭제 실패: ' + e.message); }
+        });
+      });
+    } catch (e) {
+      el.innerHTML = `<div class="msg error">${escapeHtml(e.message)}</div>`;
+    }
+  }
+
+  // ===== 학생 응시 =====
+  let currentExam = null;
+  async function loadStudentExams() {
+    const sel = $('#stu-exam-select');
+    sel.innerHTML = '<option value="">불러오는 중...</option>';
+    try {
+      const r = await callApi({ action: 'list_exams_for_student', data: { teacherCode: session.studentTeacherCode } });
+      const exams = r.data || [];
+      window._examsCache = exams;
+      if (exams.length === 0) {
+        sel.innerHTML = '<option value="">아직 등록된 시험이 없습니다</option>';
+      } else {
+        sel.innerHTML = '<option value="">시험을 선택하세요</option>' + exams.map(e =>
+          `<option value="${escapeHtml(e.id)}">${escapeHtml(e.subject)} - ${escapeHtml(e.unit)} (${e.count}문항)</option>`
+        ).join('');
+      }
+    } catch (e) {
+      sel.innerHTML = '<option value="">불러오기 실패</option>';
+    }
+  }
+
+  $('#stu-exam-select').addEventListener('change', (e) => {
+    if (!e.target.value) { $('#omr-card').style.display = 'none'; return; }
+    const exam = (window._examsCache || []).find(x => x.id === e.target.value);
+    if (!exam) return;
+    currentExam = exam;
+    const grid = $('#omr-grid');
+    const choices = exam.choices || 5;
+    const choiceArr = Array.from({length: choices}, (_, i) => i + 1);
+    grid.innerHTML = '';
+    (exam.questions || []).forEach(q => {
+      const item = document.createElement('div');
+      item.className = 'q-item';
+      item.dataset.q = q.q;
+
+      const numSpan = document.createElement('span');
+      numSpan.className = 'q-item-num';
+      numSpan.textContent = q.q;
+      item.appendChild(numSpan);
+
+      const tBadge = document.createElement('span');
+      tBadge.className = 'type-badge';
+      tBadge.textContent = q.type === 'short' ? '주관식' : q.multi ? '복수정답' : '객관식';
+      item.appendChild(tBadge);
+
+      const area = document.createElement('div');
+      area.style.cssText = 'flex:1;display:flex;gap:4px;align-items:center;min-width:180px';
+      item.appendChild(area);
+      grid.appendChild(item);
+      // [FIX 1] 복수정답 문항은 'mc_multi'로 렌더링하여 토글 동작 활성화
+      const renderType = (q.type === 'mc' && q.multi) ? 'mc_multi' : q.type;
+      renderQInput(area, q.q, renderType, choiceArr, 'student');
+    });
+    $('#omr-card').style.display = '';
+    $('#submit-msg').innerHTML = '';
+  });
+
+  $('#cancel-btn').addEventListener('click', () => {
+    $('#stu-exam-select').value = '';
+    $('#omr-card').style.display = 'none';
+  });
+
+  $('#submit-btn').addEventListener('click', async () => {
+    if (!currentExam) return;
+    const grid = $('#omr-grid');
+    const answers = [];
+    let unanswered = 0;
+    for (const q of (currentExam.questions || [])) {
+      const qItem = grid.querySelector(`.q-item[data-q="${q.q}"]`);
+      let ans = null;
+      // [FIX 2] 복수정답 분기를 먼저 검사 (그렇지 않으면 mc 분기가 먼저 잡혀서 한 개만 수집됨)
+      if (q.type === 'mc' && q.multi) {
+        const sels = qItem.querySelectorAll('.bubble.selected');
+        ans = sels.length > 0 ? Array.from(sels).map(s => parseInt(s.dataset.v)) : null;
+      } else if (q.type === 'mc') {
+        const sel = qItem.querySelector('.bubble.selected');
+        ans = sel ? parseInt(sel.dataset.v) : null;
+      } else {
+        const input = qItem.querySelector('.short-input');
+        ans = input ? input.value.trim() : '';
+      }
+      // 미응답 체크 (배열인 경우 빈 배열도 미응답으로 처리)
+      if (ans === null || ans === '' || (Array.isArray(ans) && ans.length === 0)) unanswered++;
+      answers.push({ q: q.q, answer: ans });
+    }
+    if (unanswered > 0) {
+      if (!confirm(`답하지 않은 문항이 ${unanswered}개 있습니다. 그래도 제출할까요?`)) return;
+    }
+    const btn = $('#submit-btn');
+    btn.disabled = true; btn.textContent = '채점 중...';
+    try {
+      const r = await callApi({
+        action: 'submit_for_student',
+        data: {
+          teacherCode: session.studentTeacherCode,
+          examId: currentExam.id,
+          name: session.studentName,
+          answers
+        }
+      });
+      showStudentResult(r.data);
+    } catch (e) {
+      $('#submit-msg').innerHTML = `<div class="msg error">${escapeHtml(e.message)}</div>`;
+      btn.disabled = false; btn.textContent = '답안 제출 & 채점';
+    }
+  });
+
+  function showStudentResult(result) {
+    $('#stu-exam-card').style.display = 'none';
+    $('#omr-card').style.display = 'none';
+    const cls = result.score >= 80 ? 'high' : result.score >= 60 ? 'mid' : 'low';
+    const message = result.score >= 80 ? '잘했어요! 👏' : result.score >= 60 ? '괜찮아요, 조금 더 화이팅! 💪' : '다시 한번 복습해 봐요. 📖';
+
+    const detailPills = (result.detail || []).map(d => {
+      if (d.needsReview && !d.isCorrect) {
+        return `<span class="q-pill pending">⏳ ${d.q}번 (선생님 확인 중)</span>`;
+      }
+      const c = d.isCorrect ? 'correct' : 'wrong';
+      const icon = d.isCorrect ? '⭕' : '❌';
+      // 정답은 표시하지 않음 - 맞았는지 틀렸는지만 표시
+      return `<span class="q-pill ${c}">${icon} ${d.q}번</span>`;
+    }).join('');
+
+    const reviewCount = (result.detail || []).filter(d => d.needsReview && !d.isCorrect).length;
+    const reviewNote = reviewCount > 0
+      ? `<div class="msg info" style="margin-top:14px"><strong>참고:</strong> ${reviewCount}개 주관식 답안이 정답과 비슷해서 선생님이 다시 확인하실 예정이에요.</div>`
+      : '';
+
+    $('#result-area').style.display = 'block';
+    $('#result-area').innerHTML = `
+      <div class="card" style="border:2px solid #1a1a1a">
+        <p class="section-title" style="justify-content:center">📊 ${escapeHtml(result.name)}님 채점 결과</p>
+        <div class="big-score ${cls}">${result.score}점</div>
+        <div class="score-sub">${result.correct} / ${result.count} 문항 정답 · ${message}</div>
+        <div style="font-size:13px;color:#666;margin-bottom:6px;font-weight:600">문항별 결과</div>
+        <div class="question-detail">${detailPills}</div>
+        ${reviewNote}
+        <div style="margin-top:18px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn-primary" id="retake-btn" type="button">다른 시험 응시</button>
+          <button class="btn-secondary" id="finish-btn" type="button">종료</button>
+        </div>
+      </div>`;
+    $('#retake-btn').addEventListener('click', () => {
+      $('#result-area').style.display = 'none';
+      $('#result-area').innerHTML = '';
+      $('#stu-exam-card').style.display = '';
+      $('#stu-exam-select').value = '';
+      $('#omr-card').style.display = 'none';
+    });
+    $('#finish-btn').addEventListener('click', () => {
+      session = {};
+      $('#result-area').style.display = 'none';
+      $('#result-area').innerHTML = '';
+      showScreen('role-screen');
+    });
+    $('#result-area').scrollIntoView({ behavior: 'smooth' });
+  }
+
+  // ===== 선생님: 응시 결과 =====
+  let allSubmissions = [];
+  async function loadAllSubmissions() {
+    const el = $('#results-list');
+    el.innerHTML = '<div class="loading">불러오는 중...</div>';
+    try {
+      const r = await callApi({ action: 'list_submissions' });
+      allSubmissions = r.data || [];
+      allSubmissions.sort((a,b) => String(b.submittedAt).localeCompare(String(a.submittedAt)));
+      updateFilters();
+      updateReviewBadge();
+      renderStats();
+      renderResults();
+    } catch (e) {
+      el.innerHTML = `<div class="msg error">${escapeHtml(e.message)}</div>`;
+    }
+  }
+
+  $('#refresh-results').addEventListener('click', loadAllSubmissions);
+
+  function updateReviewBadge() {
+    const count = allSubmissions.filter(s => (s.detail||[]).some(d => d.needsReview && d.manualOverride == null)).length;
+    const badge = $('#review-badge');
+    if (count > 0) { badge.textContent = count; badge.style.display = 'inline-block'; }
+    else badge.style.display = 'none';
+  }
+
+  function updateFilters() {
+    // [FIX 4] 시트가 숫자형으로 저장한 단원/이름도 일관된 문자열로 다루기 위해 String 변환
+    const subjects = [...new Set(allSubmissions.map(s => String(s.subject)))];
+    const units = [...new Set(allSubmissions.map(s => String(s.unit)))];
+    const names = [...new Set(allSubmissions.map(s => String(s.name)))];
+    const fs = $('#filter-subject'), fu = $('#filter-unit'), fn = $('#filter-name');
+    const cS = fs.value, cU = fu.value, cN = fn.value;
+    fs.innerHTML = '<option value="">전체 과목</option>' + subjects.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+    fu.innerHTML = '<option value="">전체 단원</option>' + units.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+    fn.innerHTML = '<option value="">전체 학생</option>' + names.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+    fs.value = cS; fu.value = cU; fn.value = cN;
+  }
+
+  function getFiltered() {
+    const s = $('#filter-subject').value, u = $('#filter-unit').value, n = $('#filter-name').value;
+    const r = $('#filter-review').checked;
+    return allSubmissions.filter(x => {
+      // [FIX 4] 구글시트가 "4" 같은 단원명을 숫자 4로 저장해 버려서 ===로 비교하면 영영 안 맞음 → 문자열 변환 후 비교
+      if (s && String(x.subject) !== String(s)) return false;
+      if (u && String(x.unit) !== String(u)) return false;
+      if (n && String(x.name) !== String(n)) return false;
+      if (r && !(x.detail||[]).some(d => d.needsReview && d.manualOverride == null)) return false;
+      return true;
+    });
+  }
+
+  function effectiveCorrect(d) { return d.manualOverride != null ? d.manualOverride : d.isCorrect; }
+
+  function renderStats() {
+    const f = getFiltered(), total = f.length;
+    const avg = total ? Math.round(f.reduce((a,c)=>a+c.score,0)/total) : 0;
+    const max = total ? Math.max(...f.map(s=>s.score)) : 0;
+    const min = total ? Math.min(...f.map(s=>s.score)) : 0;
+    const uniq = new Set(f.map(s=>s.name)).size;
+    $('#stats-grid').innerHTML = `
+      <div class="stat-card"><div class="stat-label">응시 수</div><div class="stat-value">${total}</div></div>
+      <div class="stat-card"><div class="stat-label">응시 학생</div><div class="stat-value">${uniq}명</div></div>
+      <div class="stat-card"><div class="stat-label">평균</div><div class="stat-value">${avg}점</div></div>
+      <div class="stat-card"><div class="stat-label">최고</div><div class="stat-value">${max}점</div></div>
+      <div class="stat-card"><div class="stat-label">최저</div><div class="stat-value">${min}점</div></div>`;
+    $('#result-count').textContent = total + '건';
+  }
+
+  function renderResults() {
+    const f = getFiltered();
+    const el = $('#results-list');
+    if (f.length === 0) { el.innerHTML = '<div class="empty">결과가 없습니다.</div>'; return; }
+    el.innerHTML = '<div class="result-row result-header"><div>학생</div><div>과목</div><div>단원</div><div>점수</div><div>일시</div><div>검토</div></div>' +
+      f.map(s => {
+        const cls = s.score >= 80 ? '' : s.score >= 60 ? 'mid' : 'low';
+        const d = new Date(s.submittedAt);
+        const ds = `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+        const rv = (s.detail||[]).filter(x => x.needsReview && x.manualOverride == null).length;
+        const rm = rv > 0 ? `<span class="review-flag">⚠ ${rv}</span>` : '';
+        return `<div class="result-row" data-id="${escapeHtml(s.id)}" style="cursor:pointer">
+          <div><strong>${escapeHtml(s.name)}</strong></div>
+          <div>${escapeHtml(s.subject)}</div>
+          <div style="font-size:12px;color:#666">${escapeHtml(s.unit)}</div>
+          <div><span class="score-badge ${cls}" data-score="${escapeHtml(s.id)}">${s.score}점</span></div>
+          <div style="font-size:11px;color:#999">${ds}</div>
+          <div>${rm}</div>
+        </div>`;
+      }).join('');
+    el.querySelectorAll('[data-id]').forEach(row => {
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('.toggle-btn')) return;
+        const sub = f.find(s => s.id === row.dataset.id);
+        if (!sub) return;
+        const ex = row.nextElementSibling;
+        if (ex && ex.classList.contains('detail-expand')) { ex.remove(); return; }
+        renderDetailExpand(row, sub);
+      });
+    });
+  }
+
+  function renderDetailExpand(row, sub) {
+    const exp = document.createElement('div');
+    exp.className = 'detail-expand';
+    exp.style.cssText = 'padding:12px 14px;background:#fafaf8;border-radius:8px;margin-bottom:6px';
+    const hasShort = (sub.detail||[]).some(d => d.type === 'short');
+    const rc = (sub.detail||[]).filter(d => d.needsReview && d.manualOverride == null).length;
+    let hint = '';
+    if (rc > 0) hint = `<div style="font-size:11px;color:#854f0b;margin-bottom:8px;font-weight:600">⚠ ${rc}개 문항이 정답과 유사합니다.</div>`;
+    else if (hasShort) hint = '<div style="font-size:11px;color:#666;margin-bottom:8px">주관식은 [⭕/❌]로 수동 정정 가능.</div>';
+    exp.innerHTML = hint + '<div class="question-detail">' +
+      (sub.detail||[]).map((d, idx) => {
+        const eff = effectiveCorrect(d);
+        const isManual = d.manualOverride != null;
+        const showReview = d.needsReview && !isManual;
+        const cls = showReview ? 'review' : (eff ? 'correct' : 'wrong');
+        const mm = isManual ? '✏️ ' : '';
+        const rm = showReview ? '⚠ ' : '';
+        const tm = d.type === 'short' ? '📝' : '';
+        const tb = d.type === 'short' ? `<button class="toggle-btn" data-idx="${idx}" type="button">${eff ? '❌로' : '⭕로'}</button>` : '';
+        const sa = d.student == null || d.student === '' ? '-' : escapeHtml(String(d.student));
+        return `<span class="q-pill ${cls}">${mm}${rm}${tm}${d.q}번 ${escapeHtml(String(d.correct))} / ${sa} ${tb}</span>`;
+      }).join('') + '</div>';
+    row.after(exp);
+    exp.querySelectorAll('.toggle-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.dataset.idx);
+        const d = sub.detail[idx];
+        const cur = effectiveCorrect(d);
+        d.manualOverride = !cur;
+        if (d.manualOverride === d.isCorrect) d.manualOverride = null;
+        try {
+          const r = await callApi({ action: 'update_submission', data: { id: sub.id, detail: sub.detail } });
+          sub.correct = r.data.correct;
+          sub.score = r.data.score;
+          const scoreEl = document.querySelector(`[data-score="${sub.id}"]`);
+          if (scoreEl) {
+            scoreEl.textContent = sub.score + '점';
+            scoreEl.className = 'score-badge ' + (sub.score >= 80 ? '' : sub.score >= 60 ? 'mid' : 'low');
+          }
+          exp.remove(); renderDetailExpand(row, sub);
+          updateReviewBadge(); renderStats(); renderResults();
+        } catch (err) {
+          alert('수정 실패: ' + err.message);
+        }
+      });
+    });
+  }
+
+  ['#filter-subject','#filter-unit','#filter-name'].forEach(s => {
+    $(s).addEventListener('change', () => { renderStats(); renderResults(); });
+  });
+  $('#filter-review').addEventListener('change', (e) => {
+    $('#filter-review-label').classList.toggle('active', e.target.checked);
+    renderStats(); renderResults();
+  });
+
+  $('#export-csv').addEventListener('click', () => {
+    const d = getFiltered();
+    if (d.length === 0) { alert('내보낼 데이터가 없습니다.'); return; }
+    const header = ['이름','과목','단원','문항수','맞은개수','점수','검토필요','제출일시'];
+    const rows = d.map(s => {
+      const r = (s.detail||[]).filter(x => x.needsReview && x.manualOverride == null).length;
+      return [s.name, s.subject, s.unit, s.count, s.correct, s.score, r > 0 ? 'Y' : '', s.submittedAt];
+    });
+    const csv = '\uFEFF' + [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = session.teacherCode + '_results_' + new Date().toISOString().slice(0,10) + '.csv';
+    a.click(); URL.revokeObjectURL(url);
+  });
+
+  // ===== 학생별 분석 =====
+  function loadAnalytics() {
+    if (allSubmissions.length === 0) loadAllSubmissions();
+    // [FIX 4] 학생 이름이 숫자(학번 등)인 경우에도 깨지지 않도록 문자열 변환
+    const names = [...new Set(allSubmissions.map(s => String(s.name)))].sort();
+    const sel = $('#analytics-student');
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">학생을 선택하세요</option>' + names.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+    sel.value = cur;
+    if (cur) renderAnalytics(cur);
+    else $('#analytics-content').innerHTML = '<div class="card"><div class="empty">학생을 선택하면 상세 분석이 표시됩니다.</div></div>';
+  }
+  $('#analytics-student').addEventListener('change', (e) => {
+    if (e.target.value) renderAnalytics(e.target.value);
+    else $('#analytics-content').innerHTML = '<div class="card"><div class="empty">학생을 선택하면 상세 분석이 표시됩니다.</div></div>';
+  });
+
+  function renderAnalytics(name) {
+    // [FIX 4] 학생 이름 비교도 문자열로 통일
+    const subs = allSubmissions.filter(s => String(s.name) === String(name)).sort((a,b) => String(a.submittedAt).localeCompare(String(b.submittedAt)));
+    if (subs.length === 0) { $('#analytics-content').innerHTML = '<div class="card"><div class="empty">응시 기록 없음</div></div>'; return; }
+    const avg = Math.round(subs.reduce((a,c)=>a+c.score,0)/subs.length);
+    const max = Math.max(...subs.map(s=>s.score));
+    const min = Math.min(...subs.map(s=>s.score));
+    const bySubject = {};
+    subs.forEach(s => { (bySubject[s.subject] = bySubject[s.subject] || []).push(s.score); });
+    const subjectStats = Object.entries(bySubject).map(([k,v]) => ({ name: k, avg: Math.round(v.reduce((a,c)=>a+c,0)/v.length), count: v.length })).sort((a,b)=>b.avg-a.avg);
+    const byUnit = {};
+    subs.forEach(s => { const k = s.subject + ' · ' + s.unit; (byUnit[k] = byUnit[k] || []).push(s.score); });
+    const unitStats = Object.entries(byUnit).map(([k,v]) => ({ name: k, avg: Math.round(v.reduce((a,c)=>a+c,0)/v.length), count: v.length })).sort((a,b)=>b.avg-a.avg);
+
+    let html = `
+      <div class="card">
+        <p class="section-title">👤 ${escapeHtml(name)} 학생 요약</p>
+        <div class="stat-grid">
+          <div class="stat-card"><div class="stat-label">응시 횟수</div><div class="stat-value">${subs.length}회</div></div>
+          <div class="stat-card"><div class="stat-label">평균</div><div class="stat-value">${avg}점</div></div>
+          <div class="stat-card"><div class="stat-label">최고</div><div class="stat-value">${max}점</div></div>
+          <div class="stat-card"><div class="stat-label">최저</div><div class="stat-value">${min}점</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <p class="section-title">📈 점수 추이</p>${renderTrendSvg(subs.slice(-20))}
+      </div>
+      <div class="card">
+        <p class="section-title">📚 과목별 성취도</p>
+        ${subjectStats.map(s => `<div class="breakdown-row"><div><strong>${escapeHtml(s.name)}</strong> <span style="color:#999;font-size:11px">${s.count}회</span></div><div class="bar-bg"><div class="bar-fill" style="width:${s.avg}%"></div></div><div style="text-align:right;font-weight:600">${s.avg}점</div></div>`).join('')}
+      </div>
+      <div class="card">
+        <p class="section-title">🔖 단원별 성취도</p>
+        ${unitStats.map(s => `<div class="breakdown-row"><div style="font-size:12px">${escapeHtml(s.name)} <span style="color:#999;font-size:11px">${s.count}회</span></div><div class="bar-bg"><div class="bar-fill" style="width:${s.avg}%"></div></div><div style="text-align:right;font-weight:600">${s.avg}점</div></div>`).join('')}
+      </div>`;
+    $('#analytics-content').innerHTML = html;
+  }
+
+  function renderTrendSvg(subs) {
+    if (subs.length === 0) return '<div class="empty">데이터 없음</div>';
+    const w = 660, h = 150, pad = 30, iW = w - pad * 2, iH = h - pad * 2;
+    const pts = subs.map((s, i) => {
+      const x = subs.length === 1 ? w/2 : pad + (i / (subs.length - 1)) * iW;
+      const y = pad + (1 - s.score / 100) * iH;
+      return { x, y, score: s.score, label: s.subject + '·' + s.unit };
+    });
+    const path = pts.map((p, i) => (i === 0 ? 'M' : 'L') + p.x + ',' + p.y).join(' ');
+    const gl = [0, 25, 50, 75, 100].map(v => {
+      const y = pad + (1 - v/100) * iH;
+      return `<line x1="${pad}" y1="${y}" x2="${w-pad}" y2="${y}" stroke="#e0e0d8" stroke-width="1" stroke-dasharray="${v===0||v===100?'0':'3,3'}"/><text x="${pad-6}" y="${y+4}" text-anchor="end" font-size="10" fill="#999">${v}</text>`;
+    }).join('');
+    const cc = pts.map(p => {
+      const cls = p.score >= 80 ? '#3b6d11' : p.score >= 60 ? '#854f0b' : '#a32d2d';
+      return `<circle cx="${p.x}" cy="${p.y}" r="4" fill="${cls}"><title>${p.label}: ${p.score}점</title></circle>`;
+    }).join('');
+    return `<svg viewBox="0 0 ${w} ${h}" class="trend-chart" xmlns="http://www.w3.org/2000/svg">${gl}<path d="${path}" fill="none" stroke="#1a1a1a" stroke-width="2"/>${cc}</svg>`;
+  }
+
+  // 초기화
+  renderAnswerInputs();
+})();
+</script>
+</body>
+</html>

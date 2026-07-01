@@ -334,10 +334,6 @@
     return __sb;
   }
 
-  // Apps Script가 서빙할 때 자동 주입
-  const BACKEND_URL = "<?= backendUrl ?>";
-  const SCHOOL_NAME = "<?= schoolName ?>";
-
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => document.querySelectorAll(sel);
 
@@ -355,28 +351,6 @@
     return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
 
-  // ===== API 호출 =====
-  async function callApi(payload) {
-    if (session.token) payload.token = session.token;
-    const r = await fetch(BACKEND_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload),
-      redirect: 'follow'
-    });
-    if (!r.ok) throw new Error('네트워크 오류 (' + r.status + ')');
-    const json = await r.json();
-    if (!json.ok) {
-      if (json.authRequired) {
-        // 토큰 만료
-        session = {};
-        showScreen('role-screen');
-      }
-      throw new Error(json.error || '알 수 없는 오류');
-    }
-    return json;
-  }
-
   // ===== 화면 전환 =====
   function showScreen(id) {
     ['role-screen','teacher-login','teacher-register','student-login','teacher-main','student-main'].forEach(s => {
@@ -385,8 +359,15 @@
     });
   }
 
-  // 학교 이름 표시
-  $('#school-name-display').textContent = SCHOOL_NAME ? (SCHOOL_NAME + ' 시험 응시/채점 시스템') : '시험 응시/채점 시스템';
+  // 학교 이름 표시 (info → RPC get_public_info)
+  (async () => {
+    let schoolName = '';
+    try {
+      const { data, error } = await sb().rpc('get_public_info');
+      if (!error && data) schoolName = (Array.isArray(data) ? (data[0] && data[0].school_name) : data.school_name) || '';
+    } catch (_) { /* 실패 시 기본 문구 */ }
+    $('#school-name-display').textContent = schoolName ? (schoolName + ' 시험 응시/채점 시스템') : '시험 응시/채점 시스템';
+  })();
 
   // 역할 선택
   document.addEventListener('click', function(e) {
@@ -497,13 +478,17 @@
     const btn = $('#stu-enter');
     btn.disabled = true; btn.textContent = '확인 중...';
     try {
-      const r = await callApi({ action: 'check_teacher_exists', data: { code } });
+      // check_teacher_exists → RPC get_teacher_public (공개 필드 code,name 만)
+      const { data, error } = await sb().rpc('get_teacher_public', { p_code: code });
+      if (error) throw new Error(error.message);
+      const teacher = Array.isArray(data) ? data[0] : data;
+      if (!teacher) throw new Error('존재하지 않는 선생님 코드입니다.');
       session.role = 'student';
       session.studentName = name;
-      session.studentTeacherCode = r.data.code;
-      session.studentTeacherName = r.data.name;
+      session.studentTeacherCode = teacher.code;
+      session.studentTeacherName = teacher.name;
       $('#stu-name-display').textContent = name;
-      $('#stu-code-display').textContent = r.data.code + ' (' + r.data.name + ' 선생님)';
+      $('#stu-code-display').textContent = teacher.code + ' (' + teacher.name + ' 선생님)';
       $('#stu-code').value = ''; $('#stu-name').value = '';
       $('#result-area').style.display = 'none';
       $('#stu-exam-card').style.display = '';
@@ -742,8 +727,10 @@
     const sel = $('#stu-exam-select');
     sel.innerHTML = '<option value="">불러오는 중...</option>';
     try {
-      const r = await callApi({ action: 'list_exams_for_student', data: { teacherCode: session.studentTeacherCode } });
-      const exams = r.data || [];
+      // list_exams_for_student → RPC (정답 제거된 목록: q,type,multi 만)
+      const { data, error } = await sb().rpc('list_exams_for_student', { p_teacher_code: session.studentTeacherCode });
+      if (error) throw new Error(error.message);
+      const exams = data || [];
       window._examsCache = exams;
       if (exams.length === 0) {
         sel.innerHTML = '<option value="">아직 등록된 시험이 없습니다</option>';
@@ -827,16 +814,18 @@
     const btn = $('#submit-btn');
     btn.disabled = true; btn.textContent = '채점 중...';
     try {
-      const r = await callApi({
-        action: 'submit_for_student',
-        data: {
+      // submit_for_student → Edge Function (서버에서 채점 + 정답 비노출)
+      const { data, error } = await sb().functions.invoke('submit_for_student', {
+        body: {
           teacherCode: session.studentTeacherCode,
           examId: currentExam.id,
           name: session.studentName,
           answers
         }
       });
-      showStudentResult(r.data);
+      if (error) throw new Error(error.message);
+      if (!data || !data.ok) throw new Error((data && data.error) || '채점에 실패했습니다.');
+      showStudentResult(data.data);
     } catch (e) {
       $('#submit-msg').innerHTML = `<div class="msg error">${escapeHtml(e.message)}</div>`;
       btn.disabled = false; btn.textContent = '답안 제출 & 채점';

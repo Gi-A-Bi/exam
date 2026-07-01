@@ -418,16 +418,16 @@
   }
 
   // 로그인/가입 성공 후 공통 처리: 세션 세팅 + 화면 전환.
-  function enterTeacherMain(code, name) {
+  function enterTeacherMain(code, name, teacherId) {
     session.role = 'teacher';
     session.token = null;          // GAS 토큰 미사용 (Supabase 세션은 supabase-js가 관리)
+    session.teacherId = teacherId; // auth.uid() — answer_keys insert 시 RLS check 에 사용
     session.teacherCode = code;
     session.teacherName = name;
     $('#tn-display').textContent = name;
     $('#tc-display').textContent = code;
     showScreen('teacher-main');
-    // NOTE: 정답지/결과 목록(list_exams / list_submissions)은 아직 GAS 백엔드라 미이전 상태.
-    //       해당 액션이 Supabase 로 이전되면 여기서 다시 불러온다.
+    // 정답지/결과 조회·정정은 Supabase(from + RLS)로 이전 완료. 학생 경로는 아직 GAS.
     loadAnswerKeys();
     loadAllSubmissions();
   }
@@ -444,7 +444,7 @@
       if (error) throw new Error(error.message);
       const prof = await fetchOwnTeacherProfile(data.user.id);
       $('#login-email').value = ''; $('#login-pw').value = '';
-      enterTeacherMain(prof.code, prof.name);
+      enterTeacherMain(prof.code, prof.name, data.user.id);
     } catch (e) {
       $('#login-msg').innerHTML = `<div class="msg error">${escapeHtml(e.message)}</div>`;
     } finally {
@@ -477,11 +477,11 @@
       if (!data || !data.ok) throw new Error((data && data.error) || '가입에 실패했습니다.');
 
       // 2) 이어서 로그인해 세션 획득 (계약 §1-7)
-      const { error: sErr } = await sb().auth.signInWithPassword({ email, password: pw });
+      const { data: sess, error: sErr } = await sb().auth.signInWithPassword({ email, password: pw });
       if (sErr) throw new Error(sErr.message);
 
       ['#reg-joincode','#reg-email','#reg-name','#reg-code','#reg-pw','#reg-pw2'].forEach(s => $(s).value = '');
-      enterTeacherMain(data.data.code, data.data.name);
+      enterTeacherMain(data.data.code, data.data.name, sess.user.id);
     } catch (e) {
       $('#reg-msg').innerHTML = `<div class="msg error">${escapeHtml(e.message)}</div>`;
     } finally {
@@ -669,7 +669,12 @@
     const btn = $('#save-key-btn');
     btn.disabled = true; btn.textContent = '저장 중...';
     try {
-      await callApi({ action: 'add_exam', data: { subject, unit, choices, questions } });
+      // add_exam → answer_keys 직접 insert. RLS check(auth.uid()=teacher_id) 때문에 teacher_id 필수.
+      const { error } = await sb().from('answer_keys').insert({
+        teacher_id: session.teacherId,
+        subject, unit, count: questions.length, choices, questions
+      });
+      if (error) throw new Error(error.message);
       $('#save-result').innerHTML = '<div class="msg success">정답지가 저장되었습니다.</div>';
       $('#new-subject').value = ''; $('#new-unit').value = '';
       questionTypes = {}; renderAnswerInputs();
@@ -686,8 +691,13 @@
     const el = $('#answer-keys-list');
     el.innerHTML = '<div class="loading">불러오는 중...</div>';
     try {
-      const r = await callApi({ action: 'list_exams' });
-      const items = r.data || [];
+      // list_exams → answer_keys 직접 select. RLS(teacher manages own exams)로 본인 것만 반환.
+      // created_at → createdAt 로 alias 해 기존 렌더링 코드를 그대로 유지.
+      const { data, error } = await sb().from('answer_keys')
+        .select('id, subject, unit, count, choices, questions, createdAt:created_at')
+        .order('created_at', { ascending: false });
+      if (error) throw new Error(error.message);
+      const items = data || [];
       if (items.length === 0) { el.innerHTML = '<div class="empty">저장된 정답지가 없습니다.</div>'; return; }
       items.sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)));
       el.innerHTML = items.map(it => {
@@ -714,7 +724,9 @@
         btn.addEventListener('click', async () => {
           if (!confirm('이 정답지를 삭제하시겠어요?')) return;
           try {
-            await callApi({ action: 'delete_exam', id: btn.dataset.del });
+            // delete_exam → answer_keys 직접 delete. RLS로 본인 것만 삭제됨.
+            const { error } = await sb().from('answer_keys').delete().eq('id', btn.dataset.del);
+            if (error) throw new Error(error.message);
             loadAnswerKeys();
           } catch (e) { alert('삭제 실패: ' + e.message); }
         });
@@ -888,8 +900,13 @@
     const el = $('#results-list');
     el.innerHTML = '<div class="loading">불러오는 중...</div>';
     try {
-      const r = await callApi({ action: 'list_submissions' });
-      allSubmissions = r.data || [];
+      // list_submissions → submissions 직접 select. RLS(teacher reads own submissions)로 본인 것만.
+      // submitted_at → submittedAt 로 alias 해 기존 렌더링/정렬 코드를 그대로 유지.
+      const { data, error } = await sb().from('submissions')
+        .select('id, name, subject, unit, count, correct, score, detail, submittedAt:submitted_at')
+        .order('submitted_at', { ascending: false });
+      if (error) throw new Error(error.message);
+      allSubmissions = data || [];
       allSubmissions.sort((a,b) => String(b.submittedAt).localeCompare(String(a.submittedAt)));
       updateFilters();
       updateReviewBadge();
@@ -1016,9 +1033,17 @@
         d.manualOverride = !cur;
         if (d.manualOverride === d.isCorrect) d.manualOverride = null;
         try {
-          const r = await callApi({ action: 'update_submission', data: { id: sub.id, detail: sub.detail } });
-          sub.correct = r.data.correct;
-          sub.score = r.data.score;
+          // update_submission → submissions.detail 만 update. correct·score 는
+          // DB 트리거(trg_recompute_submission)가 재계산하므로 프론트에서 계산하지 않고
+          // RETURNING(.select)으로 재계산된 값을 그대로 읽어온다. RLS로 본인 것만 수정됨.
+          const { data: updated, error } = await sb().from('submissions')
+            .update({ detail: sub.detail })
+            .eq('id', sub.id)
+            .select('correct, score')
+            .single();
+          if (error) throw new Error(error.message);
+          sub.correct = updated.correct;
+          sub.score = updated.score;
           const scoreEl = document.querySelector(`[data-score="${sub.id}"]`);
           if (scoreEl) {
             scoreEl.textContent = sub.score + '점';

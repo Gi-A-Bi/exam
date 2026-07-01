@@ -136,12 +136,12 @@
     <p class="section-title">👨‍🏫 선생님 로그인</p>
     <div class="row">
       <div>
-        <label class="field-label">내 코드 (예: KIM01)</label>
-        <input type="text" id="login-code" placeholder="영문/숫자" autocomplete="off" />
+        <label class="field-label">이메일 (로그인 ID)</label>
+        <input type="email" id="login-email" placeholder="teacher@school.kr" autocomplete="username" />
       </div>
       <div>
         <label class="field-label">비밀번호</label>
-        <input type="password" id="login-pw" placeholder="비밀번호" autocomplete="off" />
+        <input type="password" id="login-pw" placeholder="비밀번호" autocomplete="current-password" />
       </div>
     </div>
     <div style="margin-top:12px">
@@ -162,6 +162,12 @@
       <div>
         <label class="field-label">학교 가입코드</label>
         <input type="text" id="reg-joincode" placeholder="관리 선생님에게 받은 코드" autocomplete="off" />
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label class="field-label">이메일 (로그인 ID)</label>
+        <input type="email" id="reg-email" placeholder="teacher@school.kr" autocomplete="username" />
       </div>
     </div>
     <div class="row">
@@ -304,9 +310,29 @@
 
 </div>
 
+<!-- ===== Supabase 설정 (배포 시 실제 값으로 교체) =====
+     로그인/가입만 Supabase 로 이전됨. 나머지 액션(정답지/결과/학생 경로)은 아직 GAS 백엔드 사용. -->
+<script>
+  window.SUPABASE_URL      = window.SUPABASE_URL      || "https://YOUR-PROJECT.supabase.co";
+  window.SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || "YOUR-ANON-KEY";
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <script>
 (function() {
   'use strict';
+
+  // ===== Supabase 클라이언트 (로그인/가입 전용) =====
+  // window.supabase 는 위 CDN(UMD)이 노출하는 라이브러리 네임스페이스.
+  // 실제 클라이언트 인스턴스는 sb 에 지연 생성한다.
+  let __sb = null;
+  function sb() {
+    if (__sb) return __sb;
+    if (!window.supabase || !window.supabase.createClient)
+      throw new Error('Supabase 라이브러리를 불러오지 못했습니다. 네트워크를 확인하세요.');
+    __sb = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+    return __sb;
+  }
 
   // Apps Script가 서빙할 때 자동 주입
   const BACKEND_URL = "<?= backendUrl ?>";
@@ -375,61 +401,87 @@
   $('#reg-back').addEventListener('click', () => showScreen('role-screen'));
   $('#stu-back').addEventListener('click', () => showScreen('role-screen'));
   $('#show-register').addEventListener('click', () => showScreen('teacher-register'));
-  $('#logout-btn').addEventListener('click', () => { session = {}; showScreen('role-screen'); });
+  $('#logout-btn').addEventListener('click', async () => {
+    try { await sb().auth.signOut(); } catch (_) { /* 세션 없거나 라이브러리 미로드 시 무시 */ }
+    session = {}; showScreen('role-screen');
+  });
   $('#stu-logout').addEventListener('click', () => { session = {}; showScreen('role-screen'); });
 
-  // ===== 선생님 로그인 =====
+  // 로그인한 교사 본인의 공개 프로필(code, name) 조회.
+  // teachers RLS 정책 "teacher reads own profile"(auth.uid()=id)로 본인 행만 읽힘.
+  async function fetchOwnTeacherProfile(userId) {
+    const { data, error } = await sb()
+      .from('teachers').select('code,name').eq('id', userId).maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) throw new Error('교사 프로필을 찾을 수 없습니다. 가입이 완료되었는지 확인하세요.');
+    return data;
+  }
+
+  // 로그인/가입 성공 후 공통 처리: 세션 세팅 + 화면 전환.
+  function enterTeacherMain(code, name) {
+    session.role = 'teacher';
+    session.token = null;          // GAS 토큰 미사용 (Supabase 세션은 supabase-js가 관리)
+    session.teacherCode = code;
+    session.teacherName = name;
+    $('#tn-display').textContent = name;
+    $('#tc-display').textContent = code;
+    showScreen('teacher-main');
+    // NOTE: 정답지/결과 목록(list_exams / list_submissions)은 아직 GAS 백엔드라 미이전 상태.
+    //       해당 액션이 Supabase 로 이전되면 여기서 다시 불러온다.
+    loadAnswerKeys();
+    loadAllSubmissions();
+  }
+
+  // ===== 선생님 로그인 (Supabase Auth: 이메일+비밀번호) =====
   $('#login-btn').addEventListener('click', async () => {
-    const code = $('#login-code').value.trim();
+    const email = $('#login-email').value.trim();
     const pw = $('#login-pw').value;
-    if (!code || !pw) { $('#login-msg').innerHTML = '<div class="msg error">코드와 비밀번호를 입력해주세요.</div>'; return; }
+    if (!email || !pw) { $('#login-msg').innerHTML = '<div class="msg error">이메일과 비밀번호를 입력해주세요.</div>'; return; }
     const btn = $('#login-btn');
     btn.disabled = true; btn.textContent = '로그인 중...';
     try {
-      const r = await callApi({ action: 'login_teacher', data: { code, password: pw } });
-      session.role = 'teacher';
-      session.token = r.data.token;
-      session.teacherCode = r.data.code;
-      session.teacherName = r.data.name;
-      $('#tn-display').textContent = session.teacherName;
-      $('#tc-display').textContent = session.teacherCode;
-      $('#login-code').value = ''; $('#login-pw').value = '';
-      showScreen('teacher-main');
-      loadAnswerKeys();
-      loadAllSubmissions();
+      const { data, error } = await sb().auth.signInWithPassword({ email, password: pw });
+      if (error) throw new Error(error.message);
+      const prof = await fetchOwnTeacherProfile(data.user.id);
+      $('#login-email').value = ''; $('#login-pw').value = '';
+      enterTeacherMain(prof.code, prof.name);
     } catch (e) {
       $('#login-msg').innerHTML = `<div class="msg error">${escapeHtml(e.message)}</div>`;
     } finally {
       btn.disabled = false; btn.textContent = '로그인';
     }
   });
-  ['#login-code','#login-pw'].forEach(s => $(s).addEventListener('keypress', e => { if (e.key === 'Enter') $('#login-btn').click(); }));
+  ['#login-email','#login-pw'].forEach(s => $(s).addEventListener('keypress', e => { if (e.key === 'Enter') $('#login-btn').click(); }));
 
-  // ===== 선생님 가입 =====
+  // ===== 선생님 가입 (register_teacher Edge Function → 이어서 로그인) =====
   $('#reg-btn').addEventListener('click', async () => {
     const joinCode = $('#reg-joincode').value.trim();
+    const email = $('#reg-email').value.trim();
     const name = $('#reg-name').value.trim();
     const code = $('#reg-code').value.trim();
     const pw = $('#reg-pw').value;
     const pw2 = $('#reg-pw2').value;
     if (!joinCode) { $('#reg-msg').innerHTML = '<div class="msg error">학교 가입코드를 입력해주세요.</div>'; return; }
+    if (!email) { $('#reg-msg').innerHTML = '<div class="msg error">이메일을 입력해주세요.</div>'; return; }
     if (!name || !code) { $('#reg-msg').innerHTML = '<div class="msg error">이름과 코드를 입력해주세요.</div>'; return; }
     if (pw.length < 6) { $('#reg-msg').innerHTML = '<div class="msg error">비밀번호는 6자 이상이어야 합니다.</div>'; return; }
     if (pw !== pw2) { $('#reg-msg').innerHTML = '<div class="msg error">비밀번호 확인이 일치하지 않습니다.</div>'; return; }
     const btn = $('#reg-btn');
     btn.disabled = true; btn.textContent = '가입 중...';
     try {
-      const r = await callApi({ action: 'register_teacher', data: { joinCode, name, code, password: pw } });
-      session.role = 'teacher';
-      session.token = r.data.token;
-      session.teacherCode = r.data.code;
-      session.teacherName = r.data.name;
-      $('#tn-display').textContent = session.teacherName;
-      $('#tc-display').textContent = session.teacherCode;
-      ['#reg-joincode','#reg-name','#reg-code','#reg-pw','#reg-pw2'].forEach(s => $(s).value = '');
-      showScreen('teacher-main');
-      loadAnswerKeys();
-      loadAllSubmissions();
+      // 1) register_teacher Edge Function 호출 (joinCode 검증·코드중복·auth 생성은 서버에서)
+      const { data, error } = await sb().functions.invoke('register_teacher', {
+        body: { email, password: pw, name, code, joinCode }
+      });
+      if (error) throw new Error(error.message);
+      if (!data || !data.ok) throw new Error((data && data.error) || '가입에 실패했습니다.');
+
+      // 2) 이어서 로그인해 세션 획득 (계약 §1-7)
+      const { error: sErr } = await sb().auth.signInWithPassword({ email, password: pw });
+      if (sErr) throw new Error(sErr.message);
+
+      ['#reg-joincode','#reg-email','#reg-name','#reg-code','#reg-pw','#reg-pw2'].forEach(s => $(s).value = '');
+      enterTeacherMain(data.data.code, data.data.name);
     } catch (e) {
       $('#reg-msg').innerHTML = `<div class="msg error">${escapeHtml(e.message)}</div>`;
     } finally {

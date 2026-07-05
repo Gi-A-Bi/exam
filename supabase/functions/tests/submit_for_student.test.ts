@@ -101,3 +101,17 @@ Deno.test("없는 시험/선생님 코드는 거부", async () => {
   const r2: any = await handleSubmit({ teacherCode: "KIM01", examId: "no-exam", name: "x", answers: [] }, admin);
   assertEquals(r2.ok, false);
 });
+
+Deno.test("submissions insert 실패 → ok:false (유실을 성공으로 위장하지 않음)", async () => {
+  const db = baseDb();
+  db.insertError = { submissions: { message: "insert 실패(테스트)" } };
+  const admin = makeAdmin(db);
+  const res: any = await handleSubmit({
+    teacherCode: "KIM01",
+    examId: "exam-1",
+    name: "홍길동",
+    answers: [{ q: 1, answer: 3 }, { q: 2, answer: [1, 3] }, { q: 3, answer: "서울" }],
+  }, admin);
+  assertEquals(res.ok, false, "insert 실패 시 성공 응답을 주면 안 됨");
+  assertEquals(db.submissions.length, 0);
+});

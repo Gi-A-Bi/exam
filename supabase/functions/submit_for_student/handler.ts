@@ -46,12 +46,14 @@ export async function handleSubmit(input: SubmitInput, admin: any) {
   const graded = gradeSubmission_({ ...exam, questions: exam.questions }, answers);
 
   // 5. submissions insert — 전체 detail 저장(정답 포함, 교사가 봐야 함)
-  await admin.from("submissions").insert({
+  //    insert 실패를 삼키면 학생에겐 점수가 보이지만 교사쪽엔 저장 안 되는 유실이 발생 → 반드시 검사.
+  const { error: insErr } = await admin.from("submissions").insert({
     teacher_id: t.id, exam_id: examId, name: String(name).trim(),
     subject: exam.subject, unit: exam.unit,
     count: graded.count, correct: graded.correct, score: graded.score,
     detail: graded.detail,
   });
+  if (insErr) return { ok: false, error: insErr.message };
 
   // 6. 안전한 결과만 반환 — 문항별 정답/입력/수동정정 제거 (불변식 2-2)
   return {

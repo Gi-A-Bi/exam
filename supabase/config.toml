@@ -385,6 +385,15 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
+# Edge Functions — 익명(학생/가입 전 교사)도 호출하지만, supabase-js 가 anon 키(JWT)를
+# 자동으로 붙이므로 verify_jwt = true 로 최소 검증을 유지(완전 비인증 호출은 차단).
+# 정답 비노출·joinCode 검증 등 보안은 함수 내부(service_role)에서 처리한다.
+[functions.register_teacher]
+verify_jwt = true
+
+[functions.submit_for_student]
+verify_jwt = true
+
 [analytics]
 enabled = true
 port = 54327

@@ -130,6 +130,13 @@ create trigger trg_recompute_submission
 --    SECURITY DEFINER로 RLS를 우회하되, 응답에서 정답 컬럼을 제거.
 -- ============================================================
 
+-- 4-0. 코드 정규화 — 프론트/Edge 의 normalizeCode 와 동일 규칙
+--      (대문자화 + [A-Z0-9_-] 외 제거). 학생이 공백·기호를 섞어 입력해도 저장된 코드와 매칭.
+create or replace function public.normalize_code(p text)
+returns text language sql immutable as $$
+  select regexp_replace(upper(coalesce(p, '')), '[^A-Z0-9_-]', '', 'g');
+$$;
+
 -- 4-1. 공개 정보(학교명만)
 create or replace function public.get_public_info()
 returns table (school_name text)
@@ -141,7 +148,7 @@ $$;
 create or replace function public.get_teacher_public(p_code text)
 returns table (code text, name text)
 language sql security definer set search_path = public as $$
-  select code, name from public.teachers where code = upper(p_code);
+  select code, name from public.teachers where code = public.normalize_code(p_code);
 $$;
 
 -- 4-3. 학생용 시험 목록 — answer/answers 제거, {q,type,multi}만 노출
@@ -164,7 +171,7 @@ language sql security definer set search_path = public as $$
     ak.created_at
   from public.answer_keys ak
   join public.teachers t on t.id = ak.teacher_id
-  where t.code = upper(p_teacher_code)
+  where t.code = public.normalize_code(p_teacher_code)
   order by ak.created_at desc;
 $$;
 

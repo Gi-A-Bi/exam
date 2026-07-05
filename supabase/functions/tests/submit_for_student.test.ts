@@ -102,6 +102,54 @@ Deno.test("없는 시험/선생님 코드는 거부", async () => {
   assertEquals(r2.ok, false);
 });
 
+Deno.test("같은 시험에 같은 이름 재제출 → 거부 (제출 불변성)", async () => {
+  const db = baseDb();
+  const admin = makeAdmin(db);
+  const payload = {
+    teacherCode: "KIM01", examId: "exam-1", name: "홍길동",
+    answers: [{ q: 1, answer: 3 }],
+  };
+  const first: any = await handleSubmit({ ...payload }, admin);
+  assert(first.ok, "첫 제출은 성공해야 함");
+  assertEquals(db.submissions.length, 1);
+
+  // 같은 이름(공백 섞어도 trim 후 동일) → 거부, 저장 안 됨
+  const second: any = await handleSubmit({ ...payload, name: "  홍길동  " }, admin);
+  assertEquals(second.ok, false);
+  assert(/이미 제출/.test(second.error), "재제출 안내 메시지: " + second.error);
+  assertEquals(db.submissions.length, 1, "재제출이 저장되면 안 됨");
+
+  // 다른 이름은 정상 제출
+  const other: any = await handleSubmit({ ...payload, name: "김철수" }, admin);
+  assert(other.ok, "다른 학생은 제출 가능해야 함");
+  assertEquals(db.submissions.length, 2);
+});
+
+Deno.test("이름 공백/과대입력 하드닝 → 거부", async () => {
+  const admin = makeAdmin(baseDb());
+  const r1: any = await handleSubmit({ teacherCode: "KIM01", examId: "exam-1", name: "   ", answers: [] }, admin);
+  assertEquals(r1.ok, false);
+  const r2: any = await handleSubmit({ teacherCode: "KIM01", examId: "exam-1", name: "가".repeat(51), answers: [] }, admin);
+  assertEquals(r2.ok, false);
+  const r3: any = await handleSubmit({
+    teacherCode: "KIM01", examId: "exam-1", name: "홍길동",
+    answers: Array.from({ length: 501 }, (_, i) => ({ q: i, answer: 1 })),
+  }, admin);
+  assertEquals(r3.ok, false);
+});
+
+Deno.test("insert 시 unique 위반(동시 재제출 레이스) → 같은 재제출 안내로 매핑", async () => {
+  const db = baseDb();
+  db.insertError = { submissions: { message: 'duplicate key value violates unique constraint "submissions_exam_name_unique"' } };
+  const admin = makeAdmin(db);
+  const res: any = await handleSubmit({
+    teacherCode: "KIM01", examId: "exam-1", name: "홍길동",
+    answers: [{ q: 1, answer: 3 }],
+  }, admin);
+  assertEquals(res.ok, false);
+  assert(/이미 제출/.test(res.error), "unique 위반은 재제출 안내로 매핑: " + res.error);
+});
+
 Deno.test("submissions insert 실패 → ok:false (유실을 성공으로 위장하지 않음)", async () => {
   const db = baseDb();
   db.insertError = { submissions: { message: "insert 실패(테스트)" } };

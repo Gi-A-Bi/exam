@@ -339,7 +339,6 @@
 
   let session = {
     role: null,
-    token: null,
     teacherCode: null,
     teacherName: null,
     studentName: null,
@@ -386,7 +385,10 @@
     try { await sb().auth.signOut(); } catch (_) { /* 세션 없거나 라이브러리 미로드 시 무시 */ }
     session = {}; showScreen('role-screen');
   });
-  $('#stu-logout').addEventListener('click', () => { session = {}; showScreen('role-screen'); });
+  $('#stu-logout').addEventListener('click', () => {
+    clearStudentState();       // 이어하기 상태 종료 (미제출 임시답안은 남겨둠 — 재입장 시 복원)
+    session = {}; showScreen('role-screen');
+  });
 
   // 로그인한 교사 본인의 공개 프로필(code, name) 조회.
   // teachers RLS 정책 "teacher reads own profile"(auth.uid()=id)로 본인 행만 읽힘.
@@ -401,7 +403,6 @@
   // 로그인/가입 성공 후 공통 처리: 세션 세팅 + 화면 전환.
   function enterTeacherMain(code, name, teacherId) {
     session.role = 'teacher';
-    session.token = null;          // GAS 토큰 미사용 (Supabase 세션은 supabase-js가 관리)
     session.teacherId = teacherId; // auth.uid() — answer_keys insert 시 RLS check 에 사용
     session.teacherCode = code;
     session.teacherName = name;
@@ -494,6 +495,7 @@
       $('#stu-exam-card').style.display = '';
       $('#omr-card').style.display = 'none';
       showScreen('student-main');
+      saveStudentState(null);   // 이어하기용 학생 상태 저장
       await loadStudentExams();
     } catch (e) {
       $('#stu-msg').innerHTML = `<div class="msg error">${escapeHtml(e.message)}</div>`;
@@ -723,6 +725,99 @@
 
   // ===== 학생 응시 =====
   let currentExam = null;
+
+  // --- 응시 이어하기 (자동 임시저장) ---
+  // 입력 중 창을 닫거나 새로고침해도 localStorage 에 남은 임시답안으로 이어서 작성.
+  // 제출이 성공하면 해당 임시답안은 즉시 삭제된다(제출한 결과는 수정 불가).
+  const STUDENT_STATE_KEY = 'omr_student_v1';
+
+  function draftKey() {
+    return 'omr_draft_v1:' + (session.studentTeacherCode || '') + '|' +
+           (currentExam ? currentExam.id : '') + '|' + (session.studentName || '');
+  }
+
+  function saveStudentState(examId) {
+    try {
+      localStorage.setItem(STUDENT_STATE_KEY, JSON.stringify({
+        name: session.studentName,
+        code: session.studentTeacherCode,
+        teacherName: session.studentTeacherName,
+        examId: examId || null
+      }));
+    } catch (_) { /* 저장 불가 환경(사생활 모드 등)이면 이어하기만 비활성 */ }
+  }
+  function clearStudentState() {
+    try { localStorage.removeItem(STUDENT_STATE_KEY); } catch (_) {}
+  }
+
+  // 현재 화면의 답안 수집 (제출·임시저장 공용)
+  function collectAnswers(exam) {
+    const grid = $('#omr-grid');
+    const answers = [];
+    let unanswered = 0;
+    for (const q of (exam.questions || [])) {
+      const qItem = grid.querySelector(`.q-item[data-q="${q.q}"]`);
+      if (!qItem) continue;
+      let ans = null;
+      // [FIX 2] 복수정답 분기를 먼저 검사 (그렇지 않으면 mc 분기가 먼저 잡혀서 한 개만 수집됨)
+      if (q.type === 'mc' && q.multi) {
+        const sels = qItem.querySelectorAll('.bubble.selected');
+        ans = sels.length > 0 ? Array.from(sels).map(s => parseInt(s.dataset.v)) : null;
+      } else if (q.type === 'mc') {
+        const sel = qItem.querySelector('.bubble.selected');
+        ans = sel ? parseInt(sel.dataset.v) : null;
+      } else {
+        const input = qItem.querySelector('.short-input');
+        ans = input ? input.value.trim() : '';
+      }
+      // 미응답 체크 (배열인 경우 빈 배열도 미응답으로 처리)
+      if (ans === null || ans === '' || (Array.isArray(ans) && ans.length === 0)) unanswered++;
+      answers.push({ q: q.q, answer: ans });
+    }
+    return { answers, unanswered };
+  }
+
+  function saveDraft() {
+    if (!currentExam || !session.studentName) return;
+    try {
+      localStorage.setItem(draftKey(), JSON.stringify(collectAnswers(currentExam).answers));
+    } catch (_) {}
+  }
+  function removeDraft() {
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+  }
+  function applyDraft() {
+    if (!currentExam) return;
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
+    if (!Array.isArray(saved)) return;
+    const grid = $('#omr-grid');
+    for (const a of saved) {
+      const qItem = grid.querySelector(`.q-item[data-q="${a.q}"]`);
+      if (!qItem) continue;
+      if (Array.isArray(a.answer)) {
+        a.answer.forEach(v => {
+          const b = qItem.querySelector(`.bubble[data-v="${v}"]`);
+          if (b) b.classList.add('selected');
+        });
+      } else if (typeof a.answer === 'number') {
+        const b = qItem.querySelector(`.bubble[data-v="${a.answer}"]`);
+        if (b) b.classList.add('selected');
+      } else if (typeof a.answer === 'string' && a.answer) {
+        const input = qItem.querySelector('.short-input');
+        if (input) input.value = a.answer;
+      }
+    }
+  }
+
+  // OMR 그리드 입력 시마다 임시저장 (위임 리스너 — 그리드 재렌더에도 유지됨)
+  $('#omr-grid').addEventListener('click', (e) => {
+    if (e.target.closest('.bubble')) saveDraft();
+  });
+  $('#omr-grid').addEventListener('input', (e) => {
+    if (e.target.classList && e.target.classList.contains('short-input')) saveDraft();
+  });
+
   async function loadStudentExams() {
     const sel = $('#stu-exam-select');
     sel.innerHTML = '<option value="">불러오는 중...</option>';
@@ -745,7 +840,7 @@
   }
 
   $('#stu-exam-select').addEventListener('change', (e) => {
-    if (!e.target.value) { $('#omr-card').style.display = 'none'; return; }
+    if (!e.target.value) { $('#omr-card').style.display = 'none'; saveStudentState(null); return; }
     const exam = (window._examsCache || []).find(x => x.id === e.target.value);
     if (!exam) return;
     currentExam = exam;
@@ -776,6 +871,8 @@
       const renderType = (q.type === 'mc' && q.multi) ? 'mc_multi' : q.type;
       renderQInput(area, q.q, renderType, choiceArr, 'student');
     });
+    applyDraft();               // 임시저장된 답안이 있으면 복원(이어하기)
+    saveStudentState(exam.id);  // 새로고침 후에도 이 시험으로 복귀
     $('#omr-card').style.display = '';
     $('#submit-msg').innerHTML = '';
   });
@@ -783,34 +880,18 @@
   $('#cancel-btn').addEventListener('click', () => {
     $('#stu-exam-select').value = '';
     $('#omr-card').style.display = 'none';
+    saveStudentState(null);
   });
 
   $('#submit-btn').addEventListener('click', async () => {
     if (!currentExam) return;
-    const grid = $('#omr-grid');
-    const answers = [];
-    let unanswered = 0;
-    for (const q of (currentExam.questions || [])) {
-      const qItem = grid.querySelector(`.q-item[data-q="${q.q}"]`);
-      let ans = null;
-      // [FIX 2] 복수정답 분기를 먼저 검사 (그렇지 않으면 mc 분기가 먼저 잡혀서 한 개만 수집됨)
-      if (q.type === 'mc' && q.multi) {
-        const sels = qItem.querySelectorAll('.bubble.selected');
-        ans = sels.length > 0 ? Array.from(sels).map(s => parseInt(s.dataset.v)) : null;
-      } else if (q.type === 'mc') {
-        const sel = qItem.querySelector('.bubble.selected');
-        ans = sel ? parseInt(sel.dataset.v) : null;
-      } else {
-        const input = qItem.querySelector('.short-input');
-        ans = input ? input.value.trim() : '';
-      }
-      // 미응답 체크 (배열인 경우 빈 배열도 미응답으로 처리)
-      if (ans === null || ans === '' || (Array.isArray(ans) && ans.length === 0)) unanswered++;
-      answers.push({ q: q.q, answer: ans });
-    }
-    if (unanswered > 0) {
-      if (!confirm(`답하지 않은 문항이 ${unanswered}개 있습니다. 그래도 제출할까요?`)) return;
-    }
+    const { answers, unanswered } = collectAnswers(currentExam);
+    // 제출 전 최종 확인 경고 박스 — 제출 후에는 수정/재제출 불가.
+    const warn = (unanswered > 0 ? '⚠ 답하지 않은 문항이 ' + unanswered + '개 있습니다.\n\n' : '')
+      + '제출 전에 마킹(답안 표시)을 정확히 했는지 꼭 검토해주세요!\n'
+      + '한 번 제출하면 답안을 수정하거나 다시 제출할 수 없습니다.\n\n'
+      + '이대로 제출할까요?';
+    if (!confirm(warn)) return;
     const btn = $('#submit-btn');
     btn.disabled = true; btn.textContent = '채점 중...';
     try {
@@ -825,6 +906,8 @@
       });
       if (error) throw new Error(error.message);
       if (!data || !data.ok) throw new Error((data && data.error) || '채점에 실패했습니다.');
+      removeDraft();            // 제출 완료 → 임시답안 삭제 (제출한 결과는 수정 불가)
+      saveStudentState(null);
       showStudentResult(data.data);
     } catch (e) {
       $('#submit-msg').innerHTML = `<div class="msg error">${escapeHtml(e.message)}</div>`;
@@ -873,8 +956,10 @@
       $('#stu-exam-card').style.display = '';
       $('#stu-exam-select').value = '';
       $('#omr-card').style.display = 'none';
+      saveStudentState(null);
     });
     $('#finish-btn').addEventListener('click', () => {
+      clearStudentState();
       session = {};
       $('#result-area').style.display = 'none';
       $('#result-area').innerHTML = '';
@@ -1148,6 +1233,43 @@
 
   // 초기화
   renderAnswerInputs();
+
+  // ===== 세션/응시 이어하기 복원 (새로고침·창 닫힘 후 재방문) =====
+  (async () => {
+    // 1) 교사: Supabase 세션이 살아 있으면 대시보드로 자동 복귀
+    try {
+      const { data } = await sb().auth.getSession();
+      if (data && data.session) {
+        const prof = await fetchOwnTeacherProfile(data.session.user.id);
+        enterTeacherMain(prof.code, prof.name, data.session.user.id);
+        return;
+      }
+    } catch (_) { /* 세션 없음/실패 → 학생 복원 시도 */ }
+
+    // 2) 학생: 저장된 응시 상태가 있으면 시험 선택·임시답안까지 복원
+    try {
+      const st = JSON.parse(localStorage.getItem(STUDENT_STATE_KEY) || 'null');
+      if (st && st.name && st.code) {
+        session.role = 'student';
+        session.studentName = st.name;
+        session.studentTeacherCode = st.code;
+        session.studentTeacherName = st.teacherName || '';
+        $('#stu-name-display').textContent = st.name;
+        $('#stu-code-display').textContent = st.code + (st.teacherName ? ' (' + st.teacherName + ' 선생님)' : '');
+        $('#result-area').style.display = 'none';
+        $('#stu-exam-card').style.display = '';
+        $('#omr-card').style.display = 'none';
+        showScreen('student-main');
+        await loadStudentExams();
+        if (st.examId) {
+          const sel = $('#stu-exam-select');
+          sel.value = st.examId;
+          // 목록에 아직 있는 시험이면 change 로 그리드 렌더 + 임시답안 복원
+          if (sel.value === st.examId) sel.dispatchEvent(new Event('change'));
+        }
+      }
+    } catch (_) { /* 복원 실패 시 역할 선택 화면 유지 */ }
+  })();
 })();
 </script>
 </body>

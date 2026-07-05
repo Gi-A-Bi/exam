@@ -116,12 +116,21 @@ const json = (o: unknown) =>
 
 ## 2. `submit_for_student`
 
-### Request
+> **v2 (반+PIN 도입, 확정)**: 학생은 [선생님 코드 → 반 선택 → 이름+PIN]으로 입장한다.
+> - 입장/등록: RPC `student_enter(class_id, name, pin)` — 첫 입장이면 등록+PIN 설정(C안),
+>   교사가 초기화한 상태면 새 PIN 설정, 그 외에는 PIN 검증.
+> - PIN 분실: 교사가 반 관리에서 초기화(`students.pin_hash=null`) → 다음 입장 시 재설정.
+> - 반 목록: RPC `list_classes_public(teacher_code)`. 시험 목록: RPC `list_exams_for_student(class_id)`.
+> - 제출 불변성: 같은 학생(student_id)의 같은 시험 재제출은 거부(unique index).
+>   교사가 해당 제출 행을 삭제하면 재제출 가능.
+
+### Request (v2)
 ```json
 {
-  "teacherCode": "KIM01",
   "examId": "uuid",
+  "classId": "uuid",
   "name": "홍길동",
+  "pin": "1234",
   "answers": [
     { "q": 1, "answer": 3 },
     { "q": 2, "answer": [1, 3] },
@@ -129,6 +138,9 @@ const json = (o: unknown) =>
   ]
 }
 ```
+서버 처리: `student_verify(class_id, name, pin)` 로 PIN 재검증(불일치 → 거부) →
+시험이 해당 교사 소유이고 반 배정(`class_id null=공통`)에 맞는지 확인 →
+재제출 검사 → 채점(grading.js) → insert(student_id, class_id 포함) → 정답 제거 후 반환.
 
 ### 처리 순서
 1. 입력 검증: teacherCode, examId, name 존재 + `answers`가 배열.

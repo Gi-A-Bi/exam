@@ -1,19 +1,34 @@
 // 테스트용 supabase service_role 클라이언트 더블.
 // 실제 네트워크/Supabase 없이 핸들러 로직만 검증하기 위한 최소 구현.
 // supabase-js 의 쿼리 빌더 체인(.from().select().eq().maybeSingle(), .insert())과
-// admin.auth.admin.createUser/deleteUser 를 흉내 낸다.
+// admin.auth.admin.createUser/deleteUser, admin.rpc() 를 흉내 낸다.
 
 export interface MockDb {
   settings: Array<{ key: string; value: string }>;
   teachers: Array<{ id: string; code: string; name: string }>;
+  classes?: Array<{ id: string; teacher_id: string; name: string }>;
+  students?: Array<{ id: string; class_id: string; name: string; pin: string | null }>;
   answer_keys: Array<any>;
   submissions: Array<any>;     // insert 결과가 쌓임
   authUsers: Array<{ id: string; email: string }>;  // createUser 결과가 쌓임
   insertError?: Record<string, { message: string }>; // 특정 테이블 insert 강제 실패
+  rpcHandlers?: Record<string, (args: any) => any>;  // admin.rpc(name, args) 더블
 }
 
 let __id = 0;
 const nextId = () => "user-" + (++__id);
+
+// 실제 student_verify(SQL)와 동일 규칙의 테스트 더블: trim 매칭 + pin 일치 시 id, 아니면 null.
+export function makeStudentVerify(db: MockDb) {
+  return (args: any) => {
+    const name = String(args.p_name ?? "").trim();
+    const s = (db.students ?? []).find(
+      (x) => x.class_id === args.p_class_id && x.name === name,
+    );
+    if (!s || s.pin == null || s.pin !== String(args.p_pin)) return null;
+    return s.id;
+  };
+}
 
 export function makeAdmin(db: MockDb) {
   const match = (rows: any[], filters: Record<string, unknown>) =>
@@ -39,6 +54,16 @@ export function makeAdmin(db: MockDb) {
     return builder;
   }
 
+  function rpc(name: string, args: any) {
+    const h = db.rpcHandlers && db.rpcHandlers[name];
+    if (!h) return Promise.resolve({ data: null, error: { message: "unknown rpc: " + name } });
+    try {
+      return Promise.resolve({ data: h(args), error: null });
+    } catch (e) {
+      return Promise.resolve({ data: null, error: { message: String((e as Error).message ?? e) } });
+    }
+  }
+
   const auth = {
     admin: {
       createUser({ email }: { email: string; password: string; email_confirm: boolean }) {
@@ -59,5 +84,5 @@ export function makeAdmin(db: MockDb) {
     },
   };
 
-  return { from, auth };
+  return { from, rpc, auth };
 }

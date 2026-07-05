@@ -203,17 +203,28 @@
 <div id="student-login" style="display:none">
   <div class="card">
     <p class="section-title">✏️ 학생 응시</p>
-    <p class="hint-text" style="margin-bottom:12px">선생님이 알려주신 코드를 입력하세요.</p>
+    <p class="hint-text" style="margin-bottom:12px">선생님이 알려주신 코드를 입력하고 반을 선택하세요.</p>
     <div class="row">
       <div>
         <label class="field-label">선생님 코드</label>
         <input type="text" id="stu-code" placeholder="예: KIM01" autocomplete="off" />
       </div>
       <div>
+        <label class="field-label">반 선택</label>
+        <select id="stu-class"><option value="">코드 입력 후 선택</option></select>
+      </div>
+    </div>
+    <div class="row">
+      <div>
         <label class="field-label">본인 이름</label>
         <input type="text" id="stu-name" placeholder="이름 입력" autocomplete="off" />
       </div>
+      <div>
+        <label class="field-label">PIN (4~8자리 숫자)</label>
+        <input type="password" id="stu-pin" placeholder="나만의 PIN" inputmode="numeric" maxlength="8" autocomplete="off" />
+      </div>
     </div>
+    <p class="hint-text">처음 응시하면 지금 입력한 PIN이 <strong>내 PIN으로 설정</strong>돼요. 다음부터는 같은 PIN을 입력해야 응시할 수 있어요. PIN을 잊어버렸다면 선생님께 초기화를 요청하세요.</p>
     <div style="margin-top:12px">
       <button class="btn-primary" id="stu-enter" type="button">입장</button>
       <button class="btn-secondary" id="stu-back" type="button" style="margin-left:6px">뒤로</button>
@@ -230,6 +241,7 @@
   </div>
   <div class="tabs">
     <div class="tab active" data-tab="teacher">📚 정답지 관리</div>
+    <div class="tab" data-tab="classes">🏫 반 관리</div>
     <div class="tab" data-tab="results">📋 응시 결과<span class="tab-badge" id="review-badge" style="display:none">0</span></div>
     <div class="tab" data-tab="analytics">📊 학생별 분석</div>
   </div>
@@ -242,6 +254,7 @@
         <div><label class="field-label">단원</label><input type="text" id="new-unit" placeholder="예: 3단원 도형" /></div>
         <div style="max-width:110px;flex:0 0 110px"><label class="field-label">문항 수</label><input type="number" id="new-count" min="1" max="100" value="10" /></div>
         <div style="max-width:120px;flex:0 0 120px"><label class="field-label">기본 선택지</label><select id="new-choices"><option value="3">3지선다</option><option value="4">4지선다</option><option value="5" selected>5지선다</option></select></div>
+        <div style="max-width:170px;flex:0 0 170px"><label class="field-label">응시 반</label><select id="new-class-select"><option value="">모든 반 공통</option></select></div>
       </div>
       <p class="hint-text">각 문항 객관식/주관식 선택. 주관식 복수 정답은 쉼표(,) 구분. 예: <code>4, 사, 넷</code></p>
       <div id="answer-input-area"></div>
@@ -254,11 +267,29 @@
     </div>
   </div>
 
+  <div class="panel" id="panel-classes">
+    <div class="card">
+      <p class="section-title">➕ 새 반 만들기</p>
+      <p class="hint-text" style="margin-bottom:10px">학생이 응시하려면 반이 최소 1개 필요해요. 예: <code>2026 3학년 2반</code>, <code>1학기 과학반</code> — 연도별로 반을 새로 만들면 기록이 누적 관리돼요.</p>
+      <div class="row">
+        <div><label class="field-label">반 이름</label><input type="text" id="new-class-name" placeholder="예: 2026 3학년 2반" /></div>
+        <div style="flex:0 0 auto;align-self:flex-end"><button class="btn-primary" id="add-class-btn" type="button">반 추가</button></div>
+      </div>
+      <div id="class-add-msg"></div>
+    </div>
+    <div class="card">
+      <p class="section-title">🏫 내 반 목록</p>
+      <p class="hint-text" style="margin-bottom:10px">반 이름을 누르면 학생 명단이 열려요. 학생이 PIN을 잊었으면 <strong>[PIN 초기화]</strong> — 다음 입장 때 새 PIN을 스스로 설정해요.</p>
+      <div id="classes-list"><div class="loading">불러오는 중...</div></div>
+    </div>
+  </div>
+
   <div class="panel" id="panel-results">
     <div class="card">
       <p class="section-title">📊 전체 통계</p>
       <div class="stat-grid" id="stats-grid"></div>
       <div class="filter-row">
+        <select id="filter-class"><option value="">전체 반</option></select>
         <select id="filter-subject"><option value="">전체 과목</option></select>
         <select id="filter-unit"><option value="">전체 단원</option></select>
         <select id="filter-name"><option value="">전체 학생</option></select>
@@ -409,7 +440,7 @@
     $('#tn-display').textContent = name;
     $('#tc-display').textContent = code;
     showScreen('teacher-main');
-    // 정답지/결과 조회·정정은 Supabase(from + RLS)로 이전 완료. 학생 경로는 아직 GAS.
+    loadClasses();
     loadAnswerKeys();
     loadAllSubmissions();
   }
@@ -471,31 +502,84 @@
     }
   });
 
-  // ===== 학생 입장 =====
+  // ===== 학생 입장 (반 선택 + 이름 + PIN) =====
+  // 선생님 코드 입력 → 반 목록 로드 (디바운스)
+  let __classLoadTimer = null;
+  async function loadClassesForCode() {
+    const code = $('#stu-code').value.trim();
+    const sel = $('#stu-class');
+    if (!code) { sel.innerHTML = '<option value="">코드 입력 후 선택</option>'; return; }
+    try {
+      const { data, error } = await sb().rpc('list_classes_public', { p_teacher_code: code });
+      if (error) throw new Error(error.message);
+      const classes = data || [];
+      if (classes.length === 0) {
+        sel.innerHTML = '<option value="">등록된 반이 없어요 (코드 확인)</option>';
+      } else {
+        sel.innerHTML = '<option value="">반을 선택하세요</option>' + classes.map(c =>
+          `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('');
+      }
+    } catch (_) {
+      sel.innerHTML = '<option value="">반 목록을 불러오지 못했어요</option>';
+    }
+  }
+  $('#stu-code').addEventListener('input', () => {
+    clearTimeout(__classLoadTimer);
+    __classLoadTimer = setTimeout(loadClassesForCode, 500);
+  });
+  $('#stu-class').addEventListener('focus', () => {
+    if ($('#stu-class').options.length <= 1) loadClassesForCode();
+  });
+
   $('#stu-enter').addEventListener('click', async () => {
     const code = $('#stu-code').value.trim();
+    const classId = $('#stu-class').value;
     const name = $('#stu-name').value.trim();
+    const pin = $('#stu-pin').value.trim();
     if (!code || !name) { $('#stu-msg').innerHTML = '<div class="msg error">코드와 이름을 입력해주세요.</div>'; return; }
+    if (!classId) { $('#stu-msg').innerHTML = '<div class="msg error">반을 선택해주세요.</div>'; return; }
+    if (!/^[0-9]{4,8}$/.test(pin)) { $('#stu-msg').innerHTML = '<div class="msg error">PIN은 4~8자리 숫자로 입력해주세요.</div>'; return; }
     const btn = $('#stu-enter');
     btn.disabled = true; btn.textContent = '확인 중...';
     try {
-      // check_teacher_exists → RPC get_teacher_public (공개 필드 code,name 만)
-      const { data, error } = await sb().rpc('get_teacher_public', { p_code: code });
-      if (error) throw new Error(error.message);
-      const teacher = Array.isArray(data) ? data[0] : data;
+      // 교사 표시 정보 (공개 필드 code,name 만)
+      const { data: tData, error: tErr } = await sb().rpc('get_teacher_public', { p_code: code });
+      if (tErr) throw new Error(tErr.message);
+      const teacher = Array.isArray(tData) ? tData[0] : tData;
       if (!teacher) throw new Error('존재하지 않는 선생님 코드입니다.');
+
+      // 입장/등록 — 첫 입장이면 지금 PIN 이 내 PIN 으로 설정됨 (C안)
+      const { data: eData, error: eErr } = await sb().rpc('student_enter', {
+        p_class_id: classId, p_name: name, p_pin: pin
+      });
+      if (eErr) throw new Error(eErr.message);   // PIN 불일치 등
+      const entered = Array.isArray(eData) ? eData[0] : eData;
+      if (!entered) throw new Error('입장에 실패했습니다.');
+
+      const className = $('#stu-class').options[$('#stu-class').selectedIndex].text;
       session.role = 'student';
       session.studentName = name;
       session.studentTeacherCode = teacher.code;
       session.studentTeacherName = teacher.name;
+      session.studentClassId = classId;
+      session.studentClassName = className;
+      session.studentPin = pin;                          // 메모리 보관 (제출 시 재검증용)
+      try { sessionStorage.setItem('omr_pin_v1', pin); } catch (_) {}  // 새로고침 이어하기용(탭 닫으면 소멸)
+
       $('#stu-name-display').textContent = name;
-      $('#stu-code-display').textContent = teacher.code + ' (' + teacher.name + ' 선생님)';
-      $('#stu-code').value = ''; $('#stu-name').value = '';
+      $('#stu-code-display').textContent = teacher.code + ' · ' + className + ' (' + teacher.name + ' 선생님)';
+      $('#stu-code').value = ''; $('#stu-name').value = ''; $('#stu-pin').value = '';
       $('#result-area').style.display = 'none';
       $('#stu-exam-card').style.display = '';
       $('#omr-card').style.display = 'none';
       showScreen('student-main');
       saveStudentState(null);   // 이어하기용 학생 상태 저장
+      if (entered.status === 'registered') {
+        $('#stu-msg').innerHTML = '';
+        alert('첫 응시 등록 완료! 방금 입력한 PIN이 내 PIN으로 설정되었어요. 꼭 기억해주세요.');
+      } else if (entered.status === 'pin_reset') {
+        alert('새 PIN이 설정되었어요. 다음부터는 이 PIN으로 입장하세요.');
+      }
       await loadStudentExams();
     } catch (e) {
       $('#stu-msg').innerHTML = `<div class="msg error">${escapeHtml(e.message)}</div>`;
@@ -503,7 +587,7 @@
       btn.disabled = false; btn.textContent = '입장';
     }
   });
-  ['#stu-code','#stu-name'].forEach(s => $(s).addEventListener('keypress', e => { if (e.key === 'Enter') $('#stu-enter').click(); }));
+  ['#stu-code','#stu-name','#stu-pin'].forEach(s => $(s).addEventListener('keypress', e => { if (e.key === 'Enter') $('#stu-enter').click(); }));
 
   // ===== 탭 전환 =====
   document.addEventListener('click', function(e) {
@@ -519,8 +603,146 @@
       if (tab.dataset.tab === 'results') loadAllSubmissions();
       if (tab.dataset.tab === 'analytics') loadAnalytics();
       if (tab.dataset.tab === 'teacher') loadAnswerKeys();
+      if (tab.dataset.tab === 'classes') loadClasses();
     }
   });
+
+  // ===== 반(학급) 관리 =====
+  let allClasses = [];
+  const classNameById = (id) => { const c = allClasses.find(x => x.id === id); return c ? c.name : ''; };
+
+  // 반 목록을 쓰는 셀렉트(정답지 응시 반, 결과 필터) 동기화
+  function syncClassSelects() {
+    const ns = $('#new-class-select');
+    const cur = ns.value;
+    ns.innerHTML = '<option value="">모든 반 공통</option>' + allClasses.map(c =>
+      `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('');
+    ns.value = cur;
+    const fc = $('#filter-class');
+    const curF = fc.value;
+    fc.innerHTML = '<option value="">전체 반</option>' + allClasses.map(c =>
+      `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('');
+    fc.value = curF;
+  }
+
+  async function loadClasses() {
+    try {
+      // RLS(teacher manages own classes)로 본인 반만 반환.
+      const { data, error } = await sb().from('classes')
+        .select('id, name, createdAt:created_at').order('created_at', { ascending: true });
+      if (error) throw new Error(error.message);
+      allClasses = data || [];
+      syncClassSelects();
+      renderClasses();
+    } catch (e) {
+      $('#classes-list').innerHTML = `<div class="msg error">${escapeHtml(e.message)}</div>`;
+    }
+  }
+
+  function renderClasses() {
+    const el = $('#classes-list');
+    if (allClasses.length === 0) {
+      el.innerHTML = '<div class="empty">아직 반이 없어요. 위에서 반을 만들어야 학생이 응시할 수 있어요.</div>';
+      return;
+    }
+    el.innerHTML = allClasses.map(c => `
+      <div class="answer-key-item" data-class="${escapeHtml(c.id)}" style="cursor:pointer;flex-wrap:wrap">
+        <div class="ak-info">
+          <span class="ak-title">🏫 ${escapeHtml(c.name)}</span>
+          <span class="ak-sub">누르면 학생 명단이 열려요</span>
+        </div>
+        <button class="btn-danger" data-del-class="${escapeHtml(c.id)}" type="button">반 삭제</button>
+        <div class="class-students" id="class-students-${escapeHtml(c.id)}" style="display:none;flex-basis:100%;margin-top:8px"></div>
+      </div>`).join('');
+
+    el.querySelectorAll('[data-class]').forEach(row => {
+      row.addEventListener('click', async (e) => {
+        if (e.target.closest('button')) return;
+        const box = row.querySelector('.class-students');
+        if (box.style.display !== 'none') { box.style.display = 'none'; return; }
+        box.style.display = '';
+        await renderClassStudents(row.dataset.class, box);
+      });
+    });
+    el.querySelectorAll('[data-del-class]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const name = classNameById(btn.dataset.delClass);
+        if (!confirm(`'${name}' 반과 소속 학생 명단을 삭제할까요?\n(제출된 결과 기록은 남지만, 반 구분은 해제됩니다)`)) return;
+        try {
+          const { error } = await sb().from('classes').delete().eq('id', btn.dataset.delClass);
+          if (error) throw new Error(error.message);
+          loadClasses();
+        } catch (e) { alert('삭제 실패: ' + e.message); }
+      });
+    });
+  }
+
+  async function renderClassStudents(classId, box) {
+    box.innerHTML = '<div class="loading">학생 명단 불러오는 중...</div>';
+    try {
+      // RLS 로 본인 학생만. pin_hash 값 자체는 해시라 노출돼도 원문 PIN 은 알 수 없음.
+      const { data, error } = await sb().from('students')
+        .select('id, name, pin_hash, createdAt:created_at').eq('class_id', classId)
+        .order('name', { ascending: true });
+      if (error) throw new Error(error.message);
+      const students = data || [];
+      if (students.length === 0) {
+        box.innerHTML = '<div class="empty" style="padding:8px">아직 입장한 학생이 없어요. (학생이 처음 입장할 때 자동 등록돼요)</div>';
+        return;
+      }
+      box.innerHTML = students.map(s => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-bottom:1px solid #eee;font-size:13px">
+          <span>👧 ${escapeHtml(s.name)} <span style="font-size:11px;color:${s.pin_hash ? '#3b6d11' : '#a32d2d'}">${s.pin_hash ? 'PIN 설정됨' : 'PIN 미설정 (다음 입장 때 새로 설정)'}</span></span>
+          <span>
+            <button class="btn-secondary" data-reset-pin="${escapeHtml(s.id)}" type="button" style="font-size:11px;padding:4px 8px">PIN 초기화</button>
+            <button class="btn-danger" data-del-student="${escapeHtml(s.id)}" type="button" style="font-size:11px;padding:4px 8px;margin-left:4px">삭제</button>
+          </span>
+        </div>`).join('');
+      box.querySelectorAll('[data-reset-pin]').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          if (!confirm('이 학생의 PIN을 초기화할까요?\n학생이 다음에 입장할 때 입력하는 PIN이 새 PIN으로 설정됩니다.')) return;
+          try {
+            const { error } = await sb().from('students')
+              .update({ pin_hash: null, pin_salt: null, pin_set_at: null })
+              .eq('id', btn.dataset.resetPin);
+            if (error) throw new Error(error.message);
+            renderClassStudents(classId, box);
+          } catch (err) { alert('초기화 실패: ' + err.message); }
+        });
+      });
+      box.querySelectorAll('[data-del-student]').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          if (!confirm('이 학생을 명단에서 삭제할까요?\n(제출된 결과 기록은 남습니다. 삭제 후 같은 이름으로 다시 입장하면 새로 등록되어 재제출이 가능해져요)')) return;
+          try {
+            const { error } = await sb().from('students').delete().eq('id', btn.dataset.delStudent);
+            if (error) throw new Error(error.message);
+            renderClassStudents(classId, box);
+          } catch (err) { alert('삭제 실패: ' + err.message); }
+        });
+      });
+    } catch (e) {
+      box.innerHTML = `<div class="msg error">${escapeHtml(e.message)}</div>`;
+    }
+  }
+
+  $('#add-class-btn').addEventListener('click', async () => {
+    const name = $('#new-class-name').value.trim();
+    if (!name) { $('#class-add-msg').innerHTML = '<div class="msg error">반 이름을 입력해주세요.</div>'; return; }
+    try {
+      const { error } = await sb().from('classes')
+        .insert({ teacher_id: session.teacherId, name });
+      if (error) throw new Error(/duplicate|unique/i.test(error.message) ? '같은 이름의 반이 이미 있어요.' : error.message);
+      $('#new-class-name').value = '';
+      $('#class-add-msg').innerHTML = '<div class="msg success">반이 추가되었습니다.</div>';
+      setTimeout(() => { $('#class-add-msg').innerHTML = ''; }, 2500);
+      loadClasses();
+    } catch (e) {
+      $('#class-add-msg').innerHTML = `<div class="msg error">${escapeHtml(e.message)}</div>`;
+    }
+  });
+  $('#new-class-name').addEventListener('keypress', e => { if (e.key === 'Enter') $('#add-class-btn').click(); });
 
   // ===== 정답지 입력 =====
   let questionTypes = {};
@@ -657,8 +879,10 @@
     btn.disabled = true; btn.textContent = '저장 중...';
     try {
       // add_exam → answer_keys 직접 insert. RLS check(auth.uid()=teacher_id) 때문에 teacher_id 필수.
+      // class_id: 빈 값이면 null = 모든 반 공통, 지정하면 해당 반 학생만 응시 가능.
       const { error } = await sb().from('answer_keys').insert({
         teacher_id: session.teacherId,
+        class_id: $('#new-class-select').value || null,
         subject, unit, count: questions.length, choices, questions
       });
       if (error) throw new Error(error.message);
@@ -681,7 +905,7 @@
       // list_exams → answer_keys 직접 select. RLS(teacher manages own exams)로 본인 것만 반환.
       // created_at → createdAt 로 alias 해 기존 렌더링 코드를 그대로 유지.
       const { data, error } = await sb().from('answer_keys')
-        .select('id, subject, unit, count, choices, questions, createdAt:created_at')
+        .select('id, subject, unit, count, choices, questions, class_id, createdAt:created_at')
         .order('created_at', { ascending: false });
       if (error) throw new Error(error.message);
       const items = data || [];
@@ -698,10 +922,11 @@
         if (shortCount > 0) typeParts.push(`주관식 ${shortCount}`);
         const typeSum = typeParts.join(' · ');
         const answersStr = qs.map(q => q.type === 'mc' && q.multi ? '[' + (q.answers||[]).join(',') + ']' : q.type === 'mc' ? q.answer : (q.answers || []).join('/')).join(', ');
+        const classLabel = it.class_id ? (classNameById(it.class_id) || '지정 반') : '모든 반';
         return `<div class="answer-key-item">
           <div class="ak-info">
             <span class="ak-title">${escapeHtml(it.subject)} · ${escapeHtml(it.unit)}</span>
-            <span class="ak-sub">${it.count}문항 · ${typeSum}</span>
+            <span class="ak-sub">${it.count}문항 · ${typeSum} · 🏫 ${escapeHtml(classLabel)}</span>
             <span class="ak-sub" style="font-size:11px">정답: ${escapeHtml(answersStr)}</span>
           </div>
           <button class="btn-danger" data-del="${escapeHtml(it.id)}" type="button">삭제</button>
@@ -729,10 +954,10 @@
   // --- 응시 이어하기 (자동 임시저장) ---
   // 입력 중 창을 닫거나 새로고침해도 localStorage 에 남은 임시답안으로 이어서 작성.
   // 제출이 성공하면 해당 임시답안은 즉시 삭제된다(제출한 결과는 수정 불가).
-  const STUDENT_STATE_KEY = 'omr_student_v1';
+  const STUDENT_STATE_KEY = 'omr_student_v2';
 
   function draftKey() {
-    return 'omr_draft_v1:' + (session.studentTeacherCode || '') + '|' +
+    return 'omr_draft_v2:' + (session.studentClassId || '') + '|' +
            (currentExam ? currentExam.id : '') + '|' + (session.studentName || '');
   }
 
@@ -742,12 +967,15 @@
         name: session.studentName,
         code: session.studentTeacherCode,
         teacherName: session.studentTeacherName,
+        classId: session.studentClassId,
+        className: session.studentClassName,
         examId: examId || null
       }));
     } catch (_) { /* 저장 불가 환경(사생활 모드 등)이면 이어하기만 비활성 */ }
   }
   function clearStudentState() {
     try { localStorage.removeItem(STUDENT_STATE_KEY); } catch (_) {}
+    try { sessionStorage.removeItem('omr_pin_v1'); } catch (_) {}
   }
 
   // 현재 화면의 답안 수집 (제출·임시저장 공용)
@@ -822,8 +1050,8 @@
     const sel = $('#stu-exam-select');
     sel.innerHTML = '<option value="">불러오는 중...</option>';
     try {
-      // list_exams_for_student → RPC (정답 제거된 목록: q,type,multi 만)
-      const { data, error } = await sb().rpc('list_exams_for_student', { p_teacher_code: session.studentTeacherCode });
+      // list_exams_for_student → RPC (반 기준, 정답 제거된 목록: q,type,multi 만)
+      const { data, error } = await sb().rpc('list_exams_for_student', { p_class_id: session.studentClassId });
       if (error) throw new Error(error.message);
       const exams = data || [];
       window._examsCache = exams;
@@ -895,12 +1123,13 @@
     const btn = $('#submit-btn');
     btn.disabled = true; btn.textContent = '채점 중...';
     try {
-      // submit_for_student → Edge Function (서버에서 채점 + 정답 비노출)
+      // submit_for_student → Edge Function (서버에서 PIN 재검증 + 채점 + 정답 비노출)
       const { data, error } = await sb().functions.invoke('submit_for_student', {
         body: {
-          teacherCode: session.studentTeacherCode,
           examId: currentExam.id,
+          classId: session.studentClassId,
           name: session.studentName,
+          pin: session.studentPin,
           answers
         }
       });
@@ -977,7 +1206,7 @@
       // list_submissions → submissions 직접 select. RLS(teacher reads own submissions)로 본인 것만.
       // submitted_at → submittedAt 로 alias 해 기존 렌더링/정렬 코드를 그대로 유지.
       const { data, error } = await sb().from('submissions')
-        .select('id, name, subject, unit, count, correct, score, detail, submittedAt:submitted_at')
+        .select('id, name, subject, unit, count, correct, score, detail, class_id, submittedAt:submitted_at')
         .order('submitted_at', { ascending: false });
       if (error) throw new Error(error.message);
       allSubmissions = data || [];
@@ -1015,9 +1244,11 @@
 
   function getFiltered() {
     const s = $('#filter-subject').value, u = $('#filter-unit').value, n = $('#filter-name').value;
+    const c = $('#filter-class').value;
     const r = $('#filter-review').checked;
     return allSubmissions.filter(x => {
       // [FIX 4] 구글시트가 "4" 같은 단원명을 숫자 4로 저장해 버려서 ===로 비교하면 영영 안 맞음 → 문자열 변환 후 비교
+      if (c && String(x.class_id) !== String(c)) return false;
       if (s && String(x.subject) !== String(s)) return false;
       if (u && String(x.unit) !== String(u)) return false;
       if (n && String(x.name) !== String(n)) return false;
@@ -1054,8 +1285,9 @@
         const ds = `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
         const rv = (s.detail||[]).filter(x => x.needsReview && x.manualOverride == null).length;
         const rm = rv > 0 ? `<span class="review-flag">⚠ ${rv}</span>` : '';
+        const clsName = s.class_id ? classNameById(s.class_id) : '';
         return `<div class="result-row" data-id="${escapeHtml(s.id)}" style="cursor:pointer">
-          <div><strong>${escapeHtml(s.name)}</strong></div>
+          <div><strong>${escapeHtml(s.name)}</strong>${clsName ? `<div style="font-size:10px;color:#999">${escapeHtml(clsName)}</div>` : ''}</div>
           <div>${escapeHtml(s.subject)}</div>
           <div style="font-size:12px;color:#666">${escapeHtml(s.unit)}</div>
           <div><span class="score-badge ${cls}" data-score="${escapeHtml(s.id)}">${s.score}점</span></div>
@@ -1132,7 +1364,7 @@
     });
   }
 
-  ['#filter-subject','#filter-unit','#filter-name'].forEach(s => {
+  ['#filter-class','#filter-subject','#filter-unit','#filter-name'].forEach(s => {
     $(s).addEventListener('change', () => { renderStats(); renderResults(); });
   });
   $('#filter-review').addEventListener('change', (e) => {
@@ -1143,10 +1375,10 @@
   $('#export-csv').addEventListener('click', () => {
     const d = getFiltered();
     if (d.length === 0) { alert('내보낼 데이터가 없습니다.'); return; }
-    const header = ['이름','과목','단원','문항수','맞은개수','점수','검토필요','제출일시'];
+    const header = ['이름','반','과목','단원','문항수','맞은개수','점수','검토필요','제출일시'];
     const rows = d.map(s => {
       const r = (s.detail||[]).filter(x => x.needsReview && x.manualOverride == null).length;
-      return [s.name, s.subject, s.unit, s.count, s.correct, s.score, r > 0 ? 'Y' : '', s.submittedAt];
+      return [s.name, s.class_id ? classNameById(s.class_id) : '', s.subject, s.unit, s.count, s.correct, s.score, r > 0 ? 'Y' : '', s.submittedAt];
     });
     const csv = '\uFEFF' + [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -1249,13 +1481,29 @@
     // 2) 학생: 저장된 응시 상태가 있으면 시험 선택·임시답안까지 복원
     try {
       const st = JSON.parse(localStorage.getItem(STUDENT_STATE_KEY) || 'null');
-      if (st && st.name && st.code) {
+      if (st && st.name && st.code && st.classId) {
+        let pin = '';
+        try { pin = sessionStorage.getItem('omr_pin_v1') || ''; } catch (_) {}
+        if (!pin) {
+          // PIN 은 탭이 닫히면 소멸 → 입장 화면에 코드/이름을 채워두고 PIN 만 다시 받는다.
+          // 임시답안(localStorage)은 그대로 남아 있어 재입장하면 이어서 작성된다.
+          $('#stu-code').value = st.code;
+          $('#stu-name').value = st.name;
+          showScreen('student-login');
+          $('#stu-msg').innerHTML = '<div class="msg info">이어서 응시하려면 반을 선택하고 PIN을 다시 입력해주세요. 작성 중이던 답안은 그대로 남아 있어요.</div>';
+          await loadClassesForCode();
+          $('#stu-class').value = st.classId;
+          return;
+        }
         session.role = 'student';
         session.studentName = st.name;
         session.studentTeacherCode = st.code;
         session.studentTeacherName = st.teacherName || '';
+        session.studentClassId = st.classId;
+        session.studentClassName = st.className || '';
+        session.studentPin = pin;
         $('#stu-name-display').textContent = st.name;
-        $('#stu-code-display').textContent = st.code + (st.teacherName ? ' (' + st.teacherName + ' 선생님)' : '');
+        $('#stu-code-display').textContent = st.code + (st.className ? ' · ' + st.className : '') + (st.teacherName ? ' (' + st.teacherName + ' 선생님)' : '');
         $('#result-area').style.display = 'none';
         $('#stu-exam-card').style.display = '';
         $('#omr-card').style.display = 'none';

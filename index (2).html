@@ -259,6 +259,7 @@
       <p class="hint-text">각 문항 객관식/주관식 선택. 주관식 복수 정답은 쉼표(,) 구분. 예: <code>4, 사, 넷</code></p>
       <div id="answer-input-area"></div>
       <button class="btn-primary" id="save-key-btn" type="button" style="margin-top:12px">정답지 저장</button>
+      <button class="btn-secondary" id="cancel-edit-btn" type="button" style="margin-top:12px;margin-left:6px;display:none">수정 취소</button>
       <div id="save-result"></div>
     </div>
     <div class="card">
@@ -309,7 +310,11 @@
   <div class="panel" id="panel-analytics">
     <div class="card">
       <p class="section-title">👥 학생 선택</p>
-      <select id="analytics-student"><option value="">학생을 선택하세요</option></select>
+      <div class="filter-row">
+        <select id="analytics-student"><option value="">학생을 선택하세요</option></select>
+        <select id="analytics-subject"><option value="">전체 과목</option></select>
+      </div>
+      <p class="hint-text" style="margin:6px 0 0">전체 과목이면 과목별 선 그래프로 성적 변화를 한눈에 볼 수 있어요.</p>
     </div>
     <div id="analytics-content"></div>
   </div>
@@ -324,6 +329,17 @@
   <div class="card" id="stu-exam-card">
     <p class="section-title">📋 시험 선택</p>
     <select id="stu-exam-select"><option value="">불러오는 중...</option></select>
+    <div style="margin-top:10px">
+      <button class="btn-secondary" id="show-history-btn" type="button">📈 내 성적 보기</button>
+    </div>
+  </div>
+  <div class="card" id="history-card" style="display:none">
+    <p class="section-title">📈 내 성적</p>
+    <div class="filter-row">
+      <select id="history-subject"><option value="">전체 과목</option></select>
+      <button class="btn-secondary" id="history-close" type="button" style="margin-left:auto">닫기</button>
+    </div>
+    <div id="history-content"><div class="loading">불러오는 중...</div></div>
   </div>
   <div class="card" id="omr-card" style="display:none">
     <p class="section-title">✅ 답안지</p>
@@ -878,15 +894,26 @@
     const btn = $('#save-key-btn');
     btn.disabled = true; btn.textContent = '저장 중...';
     try {
-      // add_exam → answer_keys 직접 insert. RLS check(auth.uid()=teacher_id) 때문에 teacher_id 필수.
-      // class_id: 빈 값이면 null = 모든 반 공통, 지정하면 해당 반 학생만 응시 가능.
-      const { error } = await sb().from('answer_keys').insert({
-        teacher_id: session.teacherId,
-        class_id: $('#new-class-select').value || null,
-        subject, unit, count: questions.length, choices, questions
-      });
-      if (error) throw new Error(error.message);
-      $('#save-result').innerHTML = '<div class="msg success">정답지가 저장되었습니다.</div>';
+      if (editingExamId) {
+        // 수정 모드: 문항/정답 변경은 제출자가 있으면 DB 트리거가 거부함(복제 유도).
+        const { error } = await sb().from('answer_keys').update({
+          class_id: $('#new-class-select').value || null,
+          subject, unit, count: questions.length, choices, questions
+        }).eq('id', editingExamId);
+        if (error) throw new Error(error.message);
+        $('#save-result').innerHTML = '<div class="msg success">정답지가 수정되었습니다.</div>';
+        setExamFormMode(null);
+      } else {
+        // add_exam → answer_keys 직접 insert. RLS check(auth.uid()=teacher_id) 때문에 teacher_id 필수.
+        // class_id: 빈 값이면 null = 모든 반 공통, 지정하면 해당 반 학생만 응시 가능.
+        const { error } = await sb().from('answer_keys').insert({
+          teacher_id: session.teacherId,
+          class_id: $('#new-class-select').value || null,
+          subject, unit, count: questions.length, choices, questions
+        });
+        if (error) throw new Error(error.message);
+        $('#save-result').innerHTML = '<div class="msg success">정답지가 저장되었습니다.</div>';
+      }
       $('#new-subject').value = ''; $('#new-unit').value = '';
       questionTypes = {}; renderAnswerInputs();
       loadAnswerKeys();
@@ -894,10 +921,58 @@
     } catch (e) {
       $('#save-result').innerHTML = `<div class="msg error">${escapeHtml(e.message)}</div>`;
     } finally {
-      btn.disabled = false; btn.textContent = '정답지 저장';
+      btn.disabled = false;
+      btn.textContent = editingExamId ? '수정 내용 저장' : '정답지 저장';
     }
   });
 
+  // ===== 정답지 복제/수정 =====
+  let editingExamId = null;
+  function setExamFormMode(editId) {
+    editingExamId = editId;
+    $('#save-key-btn').textContent = editId ? '수정 내용 저장' : '정답지 저장';
+    $('#cancel-edit-btn').style.display = editId ? '' : 'none';
+  }
+  $('#cancel-edit-btn').addEventListener('click', () => {
+    setExamFormMode(null);
+    $('#new-subject').value = ''; $('#new-unit').value = '';
+    questionTypes = {}; renderAnswerInputs();
+    $('#save-result').innerHTML = '';
+  });
+
+  // 기존 정답지 내용을 입력폼에 채움 (복제·수정 공용)
+  function fillExamForm(exam) {
+    $('#new-subject').value = exam.subject;
+    $('#new-unit').value = exam.unit;
+    $('#new-count').value = (exam.questions || []).length;
+    $('#new-choices').value = exam.choices || 5;
+    $('#new-class-select').value = exam.class_id || '';
+    questionTypes = {};
+    (exam.questions || []).forEach(q => {
+      questionTypes[q.q] = q.type === 'short' ? 'short' : (q.multi ? 'mc_multi' : 'mc');
+    });
+    renderAnswerInputs();
+    const grid = $('#answer-input-grid');
+    (exam.questions || []).forEach(q => {
+      const qItem = grid.querySelector(`.q-item[data-q="${q.q}"]`);
+      if (!qItem) return;
+      if (q.type === 'mc' && q.multi) {
+        (q.answers || []).forEach(v => {
+          const b = qItem.querySelector(`.bubble[data-v="${v}"]`);
+          if (b) b.classList.add('selected');
+        });
+      } else if (q.type === 'mc') {
+        const b = qItem.querySelector(`.bubble[data-v="${q.answer}"]`);
+        if (b) b.classList.add('selected');
+      } else {
+        const inp = qItem.querySelector('.short-input');
+        if (inp) inp.value = (q.answers || []).join(', ');
+      }
+    });
+    document.querySelector('#panel-teacher .card').scrollIntoView({ behavior: 'smooth' });
+  }
+
+  let teacherExams = [];
   async function loadAnswerKeys() {
     const el = $('#answer-keys-list');
     el.innerHTML = '<div class="loading">불러오는 중...</div>';
@@ -909,6 +984,7 @@
         .order('created_at', { ascending: false });
       if (error) throw new Error(error.message);
       const items = data || [];
+      teacherExams = items;   // 복제/수정에서 사용
       if (items.length === 0) { el.innerHTML = '<div class="empty">저장된 정답지가 없습니다.</div>'; return; }
       items.sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)));
       el.innerHTML = items.map(it => {
@@ -929,18 +1005,47 @@
             <span class="ak-sub">${it.count}문항 · ${typeSum} · 🏫 ${escapeHtml(classLabel)}</span>
             <span class="ak-sub" style="font-size:11px">정답: ${escapeHtml(answersStr)}</span>
           </div>
-          <button class="btn-danger" data-del="${escapeHtml(it.id)}" type="button">삭제</button>
+          <span style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">
+            <button class="btn-secondary" data-dup="${escapeHtml(it.id)}" type="button">복제</button>
+            <button class="btn-secondary" data-edit="${escapeHtml(it.id)}" type="button">수정</button>
+            <button class="btn-danger" data-del="${escapeHtml(it.id)}" type="button">삭제</button>
+          </span>
         </div>`;
       }).join('');
       el.querySelectorAll('[data-del]').forEach(btn => {
         btn.addEventListener('click', async () => {
-          if (!confirm('이 정답지를 삭제하시겠어요?')) return;
+          if (!confirm('이 정답지를 삭제하시겠어요?\n(이 시험의 응시 결과도 함께 삭제됩니다)')) return;
           try {
             // delete_exam → answer_keys 직접 delete. RLS로 본인 것만 삭제됨.
             const { error } = await sb().from('answer_keys').delete().eq('id', btn.dataset.del);
             if (error) throw new Error(error.message);
             loadAnswerKeys();
           } catch (e) { alert('삭제 실패: ' + e.message); }
+        });
+      });
+      el.querySelectorAll('[data-dup]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const exam = teacherExams.find(x => x.id === btn.dataset.dup);
+          if (!exam) return;
+          setExamFormMode(null);           // 복제는 항상 '새로 저장'
+          fillExamForm(exam);
+          $('#save-result').innerHTML = '<div class="msg info">복제된 내용이 입력폼에 채워졌어요. 수정 후 저장하면 새 정답지로 등록됩니다.</div>';
+        });
+      });
+      el.querySelectorAll('[data-edit]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const exam = teacherExams.find(x => x.id === btn.dataset.edit);
+          if (!exam) return;
+          try {
+            // 제출된 응시가 있으면 수정 불가 → 복제 안내 (DB 트리거로도 이중 차단됨)
+            const { data: sub, error } = await sb().from('submissions')
+              .select('id').eq('exam_id', exam.id).limit(1).maybeSingle();
+            if (error) throw new Error(error.message);
+            if (sub) { alert('이미 제출된 응시가 있어 문항/정답을 수정할 수 없어요.\n[복제]로 새 정답지를 만들어 주세요.'); return; }
+          } catch (e) { alert('확인 실패: ' + e.message); return; }
+          fillExamForm(exam);
+          setExamFormMode(exam.id);
+          $('#save-result').innerHTML = '<div class="msg info">수정 모드예요. 내용을 고친 뒤 [수정 내용 저장]을 누르세요.</div>';
         });
       });
     } catch (e) {
@@ -1110,6 +1215,67 @@
     $('#omr-card').style.display = 'none';
     saveStudentState(null);
   });
+
+  // ===== 학생: 내 성적 보기 (이름+PIN 재검증, 정답 비노출) =====
+  let myHistory = [];
+  $('#show-history-btn').addEventListener('click', async () => {
+    const card = $('#history-card');
+    card.style.display = '';
+    $('#history-content').innerHTML = '<div class="loading">불러오는 중...</div>';
+    try {
+      const { data, error } = await sb().rpc('student_history', {
+        p_class_id: session.studentClassId,
+        p_name: session.studentName,
+        p_pin: session.studentPin
+      });
+      if (error) throw new Error(error.message);
+      myHistory = (data || []).map(r => ({ ...r, submittedAt: r.submitted_at }));
+      const subjects = [...new Set(myHistory.map(s => String(s.subject)))].sort((a, b) => a.localeCompare(b, 'ko'));
+      const cur = $('#history-subject').value;
+      $('#history-subject').innerHTML = '<option value="">전체 과목</option>' + subjects.map(x => `<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join('');
+      $('#history-subject').value = subjects.includes(cur) ? cur : '';
+      renderHistory();
+      card.scrollIntoView({ behavior: 'smooth' });
+    } catch (e) {
+      $('#history-content').innerHTML = `<div class="msg error">${escapeHtml(e.message)}</div>`;
+    }
+  });
+  $('#history-close').addEventListener('click', () => { $('#history-card').style.display = 'none'; });
+  $('#history-subject').addEventListener('change', renderHistory);
+
+  function renderHistory() {
+    const el = $('#history-content');
+    if (myHistory.length === 0) { el.innerHTML = '<div class="empty">아직 제출한 시험이 없어요.</div>'; return; }
+    const colorMap = subjectColors(myHistory.map(s => s.subject));
+    const f = $('#history-subject').value;
+    const subs = f ? myHistory.filter(s => String(s.subject) === f) : myHistory;
+    if (subs.length === 0) { el.innerHTML = '<div class="empty">해당 과목 기록이 없어요.</div>'; return; }
+    const avg = Math.round(subs.reduce((a, c) => a + c.score, 0) / subs.length);
+    const rows = subs.slice().reverse().map(s => {
+      const d = new Date(s.submittedAt);
+      const ds = `${d.getMonth() + 1}/${d.getDate()}`;
+      const pending = (s.detail || []).filter(x => x.needsReview).length;
+      const pills = (s.detail || []).map(x =>
+        x.needsReview ? `<span class="q-pill pending">⏳ ${x.q}번</span>`
+          : `<span class="q-pill ${x.isCorrect ? 'correct' : 'wrong'}">${x.isCorrect ? '⭕' : '❌'} ${x.q}번</span>`).join('');
+      return `<div style="padding:10px 0;border-bottom:1px solid #eee">
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;gap:8px">
+          <strong>${escapeHtml(String(s.subject))} · ${escapeHtml(String(s.unit))}</strong>
+          <span style="white-space:nowrap"><span style="color:#999;font-size:11px;margin-right:8px">${ds}</span><strong>${s.score}점</strong> <span style="color:#666;font-size:11px">(${s.correct}/${s.count})</span></span>
+        </div>
+        <div class="question-detail" style="margin-top:6px">${pills}</div>
+        ${pending > 0 ? `<div style="font-size:11px;color:#854f0b;margin-top:4px">⏳ ${pending}개 문항은 선생님이 확인 중이에요. 점수가 바뀔 수 있어요.</div>` : ''}
+      </div>`;
+    }).join('');
+    el.innerHTML = `
+      <div class="stat-grid" style="margin-bottom:8px">
+        <div class="stat-card"><div class="stat-label">응시 횟수</div><div class="stat-value">${subs.length}회</div></div>
+        <div class="stat-card"><div class="stat-label">평균</div><div class="stat-value">${avg}점</div></div>
+        <div class="stat-card"><div class="stat-label">최근 점수</div><div class="stat-value">${subs[subs.length - 1].score}점</div></div>
+      </div>
+      ${renderMultiTrendSvg(subs.slice(-40), colorMap)}
+      <div style="margin-top:8px">${rows}</div>`;
+  }
 
   $('#submit-btn').addEventListener('click', async () => {
     if (!currentExam) return;
@@ -1389,39 +1555,126 @@
   });
 
   // ===== 학생별 분석 =====
+  // ===== 성적 변화 그래프 (교사 분석 + 학생 내 성적 공용) =====
+  // 과목별 고정 색상 (검증된 팔레트 — CVD 안전 순서이므로 순서 변경 금지)
+  const SERIES_COLORS = ['#2a78d6', '#1baf7a', '#eda100', '#008300', '#4a3aa7', '#e34948'];
+  const SERIES_OTHER = '#8b8a86';   // 7과목 이상은 '기타' 회색
+
+  // 과목 → 색상 고정 매핑. 전체 과목 목록 기준으로 매기므로
+  // 과목 필터로 개수가 바뀌어도 색이 바뀌지 않는다 (색은 과목을 따라감).
+  function subjectColors(allSubjects) {
+    const sorted = [...new Set(allSubjects.map(String))].sort((a, b) => a.localeCompare(b, 'ko'));
+    const map = {};
+    sorted.forEach((s, i) => { map[s] = i < SERIES_COLORS.length ? SERIES_COLORS[i] : SERIES_OTHER; });
+    return map;
+  }
+
+  // 다중 시리즈 점수 추이 SVG (x: 응시 시각, y: 0~100점, 과목별 선 + 점 툴팁 + 직접 라벨 + 범례)
+  function renderMultiTrendSvg(subs, colorMap) {
+    if (!subs.length) return '<div class="empty">데이터 없음</div>';
+    const w = 660, h = 175, pad = 30, padR = 78, iW = w - pad - padR, iH = h - pad * 2;
+    const times = subs.map(s => new Date(s.submittedAt).getTime());
+    const tMin = Math.min(...times), tMax = Math.max(...times);
+    const X = t => tMax === tMin ? pad + iW / 2 : pad + ((t - tMin) / (tMax - tMin)) * iW;
+    const Y = v => pad + (1 - v / 100) * iH;
+    const groups = {};
+    subs.forEach(s => { const k = String(s.subject); (groups[k] = groups[k] || []).push(s); });
+    const names = Object.keys(groups).sort((a, b) => a.localeCompare(b, 'ko'));
+    const gl = [0, 25, 50, 75, 100].map(v => {
+      const y = Y(v);
+      return `<line x1="${pad}" y1="${y}" x2="${w - padR}" y2="${y}" stroke="#e0e0d8" stroke-width="1" stroke-dasharray="${v === 0 || v === 100 ? '0' : '3,3'}"/><text x="${pad - 6}" y="${y + 4}" text-anchor="end" font-size="10" fill="#999">${v}</text>`;
+    }).join('');
+    const fmtD = t => { const d = new Date(t); return (d.getMonth() + 1) + '/' + d.getDate(); };
+    const xLabels = `<text x="${pad}" y="${h - 4}" font-size="10" fill="#999">${fmtD(tMin)}</text>` +
+      (tMax !== tMin ? `<text x="${w - padR}" y="${h - 4}" text-anchor="end" font-size="10" fill="#999">${fmtD(tMax)}</text>` : '');
+    let series = '';
+    const usedLabelY = [];   // 직접 라벨 겹침 방지용
+    names.forEach(name => {
+      const color = colorMap[name] || SERIES_OTHER;
+      const pts = groups[name].map(s => ({ x: X(new Date(s.submittedAt).getTime()), y: Y(s.score), s }));
+      if (pts.length > 1) {
+        series += `<path d="${pts.map((p, i) => (i ? 'L' : 'M') + p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ')}" fill="none" stroke="${color}" stroke-width="2"/>`;
+      }
+      series += pts.map(p =>
+        `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="${color}" stroke="#fff" stroke-width="1.5"><title>${escapeHtml(String(p.s.subject))} · ${escapeHtml(String(p.s.unit))}: ${p.s.score}점</title></circle>`).join('');
+      // 마지막 점 옆 직접 라벨 (텍스트는 잉크색 — 색만으로 구분하지 않음). 겹치면 아래로 살짝 밀기.
+      const last = pts[pts.length - 1];
+      let ly = last.y + 4;
+      while (usedLabelY.some(u => Math.abs(u - ly) < 11)) ly += 12;
+      usedLabelY.push(ly);
+      series += `<text x="${(last.x + 8).toFixed(1)}" y="${ly.toFixed(1)}" font-size="10" fill="#52514e">${escapeHtml(name)}</text>`;
+    });
+    const legend = names.length > 1
+      ? '<div style="display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:#52514e;margin-top:2px">' +
+        names.map(n => `<span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${colorMap[n] || SERIES_OTHER};margin-right:4px;vertical-align:-1px"></span>${escapeHtml(n)}</span>`).join('') + '</div>'
+      : '';
+    return `<svg viewBox="0 0 ${w} ${h}" class="trend-chart" xmlns="http://www.w3.org/2000/svg">${gl}${xLabels}${series}</svg>${legend}`;
+  }
+
+  // 학생 구분 키: 반이 다르면 동명이인도 다른 학생 (반 미지정 옛 데이터는 이름만으로 묶임)
+  function studentKey(s) { return (s.class_id || '') + '|' + String(s.name); }
+
   function loadAnalytics() {
     if (allSubmissions.length === 0) loadAllSubmissions();
-    // [FIX 4] 학생 이름이 숫자(학번 등)인 경우에도 깨지지 않도록 문자열 변환
-    const names = [...new Set(allSubmissions.map(s => String(s.name)))].sort();
+    const seen = new Map();
+    allSubmissions.forEach(s => { const k = studentKey(s); if (!seen.has(k)) seen.set(k, s); });
+    const opts = [...seen.entries()].map(([key, s]) => ({
+      key,
+      label: String(s.name) + (s.class_id ? ' (' + (classNameById(s.class_id) || '반') + ')' : '')
+    })).sort((a, b) => a.label.localeCompare(b.label, 'ko'));
     const sel = $('#analytics-student');
     const cur = sel.value;
-    sel.innerHTML = '<option value="">학생을 선택하세요</option>' + names.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+    sel.innerHTML = '<option value="">학생을 선택하세요</option>' + opts.map(o => `<option value="${escapeHtml(o.key)}">${escapeHtml(o.label)}</option>`).join('');
     sel.value = cur;
-    if (cur) renderAnalytics(cur);
+    refreshAnalyticsSubjects();
+    if (sel.value) renderAnalytics(sel.value);
     else $('#analytics-content').innerHTML = '<div class="card"><div class="empty">학생을 선택하면 상세 분석이 표시됩니다.</div></div>';
   }
-  $('#analytics-student').addEventListener('change', (e) => {
-    if (e.target.value) renderAnalytics(e.target.value);
+
+  function refreshAnalyticsSubjects() {
+    const key = $('#analytics-student').value;
+    const sel = $('#analytics-subject');
+    const cur = sel.value;
+    const subjects = key
+      ? [...new Set(allSubmissions.filter(s => studentKey(s) === key).map(s => String(s.subject)))].sort((a, b) => a.localeCompare(b, 'ko'))
+      : [];
+    sel.innerHTML = '<option value="">전체 과목</option>' + subjects.map(x => `<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join('');
+    sel.value = subjects.includes(cur) ? cur : '';
+  }
+
+  $('#analytics-student').addEventListener('change', () => {
+    refreshAnalyticsSubjects();
+    const v = $('#analytics-student').value;
+    if (v) renderAnalytics(v);
     else $('#analytics-content').innerHTML = '<div class="card"><div class="empty">학생을 선택하면 상세 분석이 표시됩니다.</div></div>';
   });
+  $('#analytics-subject').addEventListener('change', () => {
+    const v = $('#analytics-student').value;
+    if (v) renderAnalytics(v);
+  });
 
-  function renderAnalytics(name) {
-    // [FIX 4] 학생 이름 비교도 문자열로 통일
-    const subs = allSubmissions.filter(s => String(s.name) === String(name)).sort((a,b) => String(a.submittedAt).localeCompare(String(b.submittedAt)));
-    if (subs.length === 0) { $('#analytics-content').innerHTML = '<div class="card"><div class="empty">응시 기록 없음</div></div>'; return; }
-    const avg = Math.round(subs.reduce((a,c)=>a+c.score,0)/subs.length);
-    const max = Math.max(...subs.map(s=>s.score));
-    const min = Math.min(...subs.map(s=>s.score));
+  function renderAnalytics(key) {
+    const all = allSubmissions.filter(s => studentKey(s) === key).sort((a, b) => String(a.submittedAt).localeCompare(String(b.submittedAt)));
+    if (all.length === 0) { $('#analytics-content').innerHTML = '<div class="card"><div class="empty">응시 기록 없음</div></div>'; return; }
+    // 색은 전체 과목 기준으로 고정 → 필터를 걸어도 과목 색 유지
+    const colorMap = subjectColors(all.map(s => s.subject));
+    const subjFilter = $('#analytics-subject').value;
+    const subs = subjFilter ? all.filter(s => String(s.subject) === subjFilter) : all;
+    if (subs.length === 0) { $('#analytics-content').innerHTML = '<div class="card"><div class="empty">해당 과목 기록 없음</div></div>'; return; }
+    const dispName = String(all[0].name) + (all[0].class_id ? ' (' + (classNameById(all[0].class_id) || '반') + ')' : '');
+    const avg = Math.round(subs.reduce((a, c) => a + c.score, 0) / subs.length);
+    const max = Math.max(...subs.map(s => s.score));
+    const min = Math.min(...subs.map(s => s.score));
     const bySubject = {};
     subs.forEach(s => { (bySubject[s.subject] = bySubject[s.subject] || []).push(s.score); });
-    const subjectStats = Object.entries(bySubject).map(([k,v]) => ({ name: k, avg: Math.round(v.reduce((a,c)=>a+c,0)/v.length), count: v.length })).sort((a,b)=>b.avg-a.avg);
+    const subjectStats = Object.entries(bySubject).map(([k, v]) => ({ name: k, avg: Math.round(v.reduce((a, c) => a + c, 0) / v.length), count: v.length })).sort((a, b) => b.avg - a.avg);
     const byUnit = {};
     subs.forEach(s => { const k = s.subject + ' · ' + s.unit; (byUnit[k] = byUnit[k] || []).push(s.score); });
-    const unitStats = Object.entries(byUnit).map(([k,v]) => ({ name: k, avg: Math.round(v.reduce((a,c)=>a+c,0)/v.length), count: v.length })).sort((a,b)=>b.avg-a.avg);
+    const unitStats = Object.entries(byUnit).map(([k, v]) => ({ name: k, avg: Math.round(v.reduce((a, c) => a + c, 0) / v.length), count: v.length })).sort((a, b) => b.avg - a.avg);
 
     let html = `
       <div class="card">
-        <p class="section-title">👤 ${escapeHtml(name)} 학생 요약</p>
+        <p class="section-title">👤 ${escapeHtml(dispName)} 학생 요약${subjFilter ? ' — ' + escapeHtml(subjFilter) : ''}</p>
         <div class="stat-grid">
           <div class="stat-card"><div class="stat-label">응시 횟수</div><div class="stat-value">${subs.length}회</div></div>
           <div class="stat-card"><div class="stat-label">평균</div><div class="stat-value">${avg}점</div></div>
@@ -1430,7 +1683,7 @@
         </div>
       </div>
       <div class="card">
-        <p class="section-title">📈 점수 추이</p>${renderTrendSvg(subs.slice(-20))}
+        <p class="section-title">📈 성적 변화${subjFilter ? '' : ' (과목별)'}</p>${renderMultiTrendSvg(subs.slice(-40), colorMap)}
       </div>
       <div class="card">
         <p class="section-title">📚 과목별 성취도</p>
@@ -1441,26 +1694,6 @@
         ${unitStats.map(s => `<div class="breakdown-row"><div style="font-size:12px">${escapeHtml(s.name)} <span style="color:#999;font-size:11px">${s.count}회</span></div><div class="bar-bg"><div class="bar-fill" style="width:${s.avg}%"></div></div><div style="text-align:right;font-weight:600">${s.avg}점</div></div>`).join('')}
       </div>`;
     $('#analytics-content').innerHTML = html;
-  }
-
-  function renderTrendSvg(subs) {
-    if (subs.length === 0) return '<div class="empty">데이터 없음</div>';
-    const w = 660, h = 150, pad = 30, iW = w - pad * 2, iH = h - pad * 2;
-    const pts = subs.map((s, i) => {
-      const x = subs.length === 1 ? w/2 : pad + (i / (subs.length - 1)) * iW;
-      const y = pad + (1 - s.score / 100) * iH;
-      return { x, y, score: s.score, label: s.subject + '·' + s.unit };
-    });
-    const path = pts.map((p, i) => (i === 0 ? 'M' : 'L') + p.x + ',' + p.y).join(' ');
-    const gl = [0, 25, 50, 75, 100].map(v => {
-      const y = pad + (1 - v/100) * iH;
-      return `<line x1="${pad}" y1="${y}" x2="${w-pad}" y2="${y}" stroke="#e0e0d8" stroke-width="1" stroke-dasharray="${v===0||v===100?'0':'3,3'}"/><text x="${pad-6}" y="${y+4}" text-anchor="end" font-size="10" fill="#999">${v}</text>`;
-    }).join('');
-    const cc = pts.map(p => {
-      const cls = p.score >= 80 ? '#3b6d11' : p.score >= 60 ? '#854f0b' : '#a32d2d';
-      return `<circle cx="${p.x}" cy="${p.y}" r="4" fill="${cls}"><title>${p.label}: ${p.score}점</title></circle>`;
-    }).join('');
-    return `<svg viewBox="0 0 ${w} ${h}" class="trend-chart" xmlns="http://www.w3.org/2000/svg">${gl}<path d="${path}" fill="none" stroke="#1a1a1a" stroke-width="2"/>${cc}</svg>`;
   }
 
   // 초기화

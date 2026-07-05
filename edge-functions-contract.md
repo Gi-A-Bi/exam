@@ -121,6 +121,8 @@ const json = (o: unknown) =>
 >   교사가 초기화한 상태면 새 PIN 설정, 그 외에는 PIN 검증.
 > - PIN 분실: 교사가 반 관리에서 초기화(`students.pin_hash=null`) → 다음 입장 시 재설정.
 > - 반 목록: RPC `list_classes_public(teacher_code)`. 시험 목록: RPC `list_exams_for_student(class_id)`.
+> - 내 성적 보기: RPC `student_history(class_id, name, pin)` — PIN 재검증 후 본인 제출 기록만.
+>   detail 은 q/type/multi/isCorrect(교사 정정 반영)/needsReview 만 반환(정답·입력값 비노출, 불변식 2-2).
 > - 제출 불변성: 같은 학생(student_id)의 같은 시험 재제출은 거부(unique index).
 >   교사가 해당 제출 행을 삭제하면 재제출 가능.
 

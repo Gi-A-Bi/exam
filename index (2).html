@@ -448,7 +448,8 @@
   }
 
   // 로그인/가입 성공 후 공통 처리: 세션 세팅 + 화면 전환.
-  function enterTeacherMain(code, name, teacherId) {
+  // 반 목록을 먼저 로드해야 정답지/결과의 반 이름 라벨이 첫 렌더부터 정확함.
+  async function enterTeacherMain(code, name, teacherId) {
     session.role = 'teacher';
     session.teacherId = teacherId; // auth.uid() — answer_keys insert 시 RLS check 에 사용
     session.teacherCode = code;
@@ -456,7 +457,7 @@
     $('#tn-display').textContent = name;
     $('#tc-display').textContent = code;
     showScreen('teacher-main');
-    loadClasses();
+    await loadClasses();
     loadAnswerKeys();
     loadAllSubmissions();
   }
@@ -682,12 +683,32 @@
     });
     el.querySelectorAll('[data-del-class]').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const name = classNameById(btn.dataset.delClass);
-        if (!confirm(`'${name}' 반과 소속 학생 명단을 삭제할까요?\n(제출된 결과 기록은 남지만, 반 구분은 해제됩니다)`)) return;
+        const id = btn.dataset.delClass;
+        const name = classNameById(id);
         try {
-          const { error } = await sb().from('classes').delete().eq('id', btn.dataset.delClass);
+          // 이 반 전용 시험이 있으면 교사에게 처리 방법을 물어보고 진행.
+          // (DB 도 restrict 로 전용 시험이 남은 반 삭제를 거부 — 이중 안전장치)
+          const { data: exams, error: exErr } = await sb().from('answer_keys')
+            .select('id').eq('class_id', id);
+          if (exErr) throw new Error(exErr.message);
+          const n = (exams || []).length;
+          if (n > 0) {
+            const ok = confirm(
+              `'${name}' 반 전용 시험이 ${n}개 있습니다.\n\n` +
+              `[확인] 전용 시험 ${n}개와 그 응시 결과, 학생 명단까지 모두 삭제하고 반을 지웁니다.\n` +
+              `[취소] 삭제를 중단합니다. 시험을 남기려면 각 시험의 '응시 반'을 ` +
+              `'모든 반 공통'이나 다른 반으로 수정한 뒤 다시 삭제해주세요.`
+            );
+            if (!ok) return;
+            const { error: delEx } = await sb().from('answer_keys').delete().eq('class_id', id);
+            if (delEx) throw new Error(delEx.message);
+          } else {
+            if (!confirm(`'${name}' 반과 소속 학생 명단을 삭제할까요?\n(제출된 결과 기록은 남지만, 반 구분은 해제됩니다)`)) return;
+          }
+          const { error } = await sb().from('classes').delete().eq('id', id);
           if (error) throw new Error(error.message);
           loadClasses();
+          loadAnswerKeys();   // 함께 삭제된 시험 반영
         } catch (e) { alert('삭제 실패: ' + e.message); }
       });
     });
@@ -1303,6 +1324,7 @@
       if (!data || !data.ok) throw new Error((data && data.error) || '채점에 실패했습니다.');
       removeDraft();            // 제출 완료 → 임시답안 삭제 (제출한 결과는 수정 불가)
       saveStudentState(null);
+      btn.disabled = false; btn.textContent = '답안 제출 & 채점';   // 다음 시험 응시 대비 복원
       showStudentResult(data.data);
     } catch (e) {
       $('#submit-msg').innerHTML = `<div class="msg error">${escapeHtml(e.message)}</div>`;
@@ -1313,6 +1335,7 @@
   function showStudentResult(result) {
     $('#stu-exam-card').style.display = 'none';
     $('#omr-card').style.display = 'none';
+    $('#history-card').style.display = 'none';   // 열려 있던 옛 성적 카드는 닫음(스테일 방지)
     const cls = result.score >= 80 ? 'high' : result.score >= 60 ? 'mid' : 'low';
     const message = result.score >= 80 ? '잘했어요! 👏' : result.score >= 60 ? '괜찮아요, 조금 더 화이팅! 💪' : '다시 한번 복습해 봐요. 📖';
 

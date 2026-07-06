@@ -20,6 +20,9 @@
 
 ## 1. `register_teacher`
 
+> **결정(2026-07): 학교 가입코드(joinCode) 폐지.** 요청에서 joinCode 를 받지 않고
+> 검증도 하지 않는다 — 누구나 가입 가능. 아래 원문 명세의 joinCode 부분은 무효.
+
 ### Request
 ```json
 {

@@ -1,11 +1,12 @@
-// 검증: register_teacher 가 joinCode 불일치 / 코드 중복 / 이메일 중복을 올바로 거부하는지.
+// 검증: register_teacher 가 코드 중복 / 이메일 중복 등을 올바로 거부하는지.
+// (결정 2026-07: 가입코드(joinCode) 검증은 제거됨 — 코드 없이 가입 가능)
 import { assert, assertEquals } from "./assert.ts";
 import { handleRegister } from "../register_teacher/handler.ts";
 import { makeAdmin, type MockDb } from "./mock_admin.ts";
 
 function baseDb(): MockDb {
   return {
-    settings: [{ key: "joinCode", value: "sjes2026" }],
+    settings: [],
     teachers: [],
     answer_keys: [],
     submissions: [],
@@ -18,7 +19,6 @@ const VALID = {
   password: "secret1",
   name: "김민성",
   code: "KIM01",
-  joinCode: "sjes2026",
 };
 
 Deno.test("정상 가입 — 성공 + teachers/authUsers 에 1건씩", async () => {
@@ -29,23 +29,6 @@ Deno.test("정상 가입 — 성공 + teachers/authUsers 에 1건씩", async () 
   assertEquals(res.data, { code: "KIM01", name: "김민성" });
   assertEquals(db.teachers.length, 1);
   assertEquals(db.authUsers.length, 1);
-});
-
-Deno.test("joinCode 불일치 → 거부 (auth 사용자 생성 안 됨)", async () => {
-  const db = baseDb();
-  const admin = makeAdmin(db);
-  const res: any = await handleRegister({ ...VALID, joinCode: "WRONG" }, admin);
-  assertEquals(res.ok, false);
-  assertEquals(res.error, "가입코드가 일치하지 않습니다.");
-  assertEquals(db.authUsers.length, 0, "거부 시 auth 사용자가 생성되면 안 됨");
-  assertEquals(db.teachers.length, 0);
-});
-
-Deno.test("joinCode 누락 → 거부", async () => {
-  const admin = makeAdmin(baseDb());
-  const res: any = await handleRegister({ ...VALID, joinCode: undefined }, admin);
-  assertEquals(res.ok, false);
-  assertEquals(res.error, "가입코드가 일치하지 않습니다.");
 });
 
 Deno.test("코드 중복 → 거부 (auth 사용자 생성 전에 차단)", async () => {

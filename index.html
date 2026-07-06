@@ -157,13 +157,6 @@
 <div id="teacher-register" style="display:none">
   <div class="card">
     <p class="section-title">👨‍🏫 선생님 가입</p>
-    <p class="hint-text" style="margin-bottom:12px">학교 가입코드는 관리 선생님에게 문의하세요.</p>
-    <div class="row">
-      <div>
-        <label class="field-label">학교 가입코드</label>
-        <input type="text" id="reg-joincode" placeholder="관리 선생님에게 받은 코드" autocomplete="off" />
-      </div>
-    </div>
     <div class="row">
       <div>
         <label class="field-label">이메일 (로그인 ID)</label>
@@ -486,13 +479,11 @@
 
   // ===== 선생님 가입 (register_teacher Edge Function → 이어서 로그인) =====
   $('#reg-btn').addEventListener('click', async () => {
-    const joinCode = $('#reg-joincode').value.trim();
     const email = $('#reg-email').value.trim();
     const name = $('#reg-name').value.trim();
     const code = $('#reg-code').value.trim();
     const pw = $('#reg-pw').value;
     const pw2 = $('#reg-pw2').value;
-    if (!joinCode) { $('#reg-msg').innerHTML = '<div class="msg error">학교 가입코드를 입력해주세요.</div>'; return; }
     if (!email) { $('#reg-msg').innerHTML = '<div class="msg error">이메일을 입력해주세요.</div>'; return; }
     if (!name || !code) { $('#reg-msg').innerHTML = '<div class="msg error">이름과 코드를 입력해주세요.</div>'; return; }
     if (pw.length < 6) { $('#reg-msg').innerHTML = '<div class="msg error">비밀번호는 6자 이상이어야 합니다.</div>'; return; }
@@ -500,9 +491,9 @@
     const btn = $('#reg-btn');
     btn.disabled = true; btn.textContent = '가입 중...';
     try {
-      // 1) register_teacher Edge Function 호출 (joinCode 검증·코드중복·auth 생성은 서버에서)
+      // 1) register_teacher Edge Function 호출 (코드중복 확인·auth 생성은 서버에서)
       const { data, error } = await sb().functions.invoke('register_teacher', {
-        body: { email, password: pw, name, code, joinCode }
+        body: { email, password: pw, name, code }
       });
       if (error) throw new Error(error.message);
       if (!data || !data.ok) throw new Error((data && data.error) || '가입에 실패했습니다.');
@@ -511,7 +502,7 @@
       const { data: sess, error: sErr } = await sb().auth.signInWithPassword({ email, password: pw });
       if (sErr) throw new Error(sErr.message);
 
-      ['#reg-joincode','#reg-email','#reg-name','#reg-code','#reg-pw','#reg-pw2'].forEach(s => $(s).value = '');
+      ['#reg-email','#reg-name','#reg-code','#reg-pw','#reg-pw2'].forEach(s => $(s).value = '');
       enterTeacherMain(data.data.code, data.data.name, sess.user.id);
     } catch (e) {
       $('#reg-msg').innerHTML = `<div class="msg error">${escapeHtml(e.message)}</div>`;

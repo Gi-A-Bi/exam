@@ -571,6 +571,6 @@ $$;
 -- ## 학교 설정 — ★ 아래 두 값을 실제 값으로 고친 뒤 실행하세요 ★
 -- ################################################################
 insert into public.settings (key, value) values
-  ('schoolName', '여기에_학교이름'),          -- 예: '서울예술중학교'
-  ('joinCode',   '여기에_교사가입코드')       -- 교사들에게만 알려줄 코드
+  ('schoolName', '여기에_학교이름')          -- 예: '서울예술중학교'
 on conflict (key) do update set value = excluded.value;
+-- (가입코드 joinCode 는 사용하지 않음 — 코드 없이 가입 가능)

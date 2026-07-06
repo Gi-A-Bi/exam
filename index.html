@@ -357,10 +357,11 @@
 
 </div>
 
-<!-- ===== Supabase 설정 (배포 시 실제 값으로 교체) =====
-     로그인/가입만 Supabase 로 이전됨. 나머지 액션(정답지/결과/학생 경로)은 아직 GAS 백엔드 사용. -->
+<!-- ===== Supabase 설정 =====
+     URL: exam-omr 프로젝트(sirhiuxgoaghzxzbtkca). ANON_KEY 는 대시보드
+     Settings → API 의 `anon public` 키로 교체 (공개되어도 안전한 키). -->
 <script>
-  window.SUPABASE_URL      = window.SUPABASE_URL      || "https://YOUR-PROJECT.supabase.co";
+  window.SUPABASE_URL      = window.SUPABASE_URL      || "https://sirhiuxgoaghzxzbtkca.supabase.co";
   window.SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || "YOUR-ANON-KEY";
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

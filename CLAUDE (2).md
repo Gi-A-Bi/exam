@@ -81,7 +81,7 @@ submissions  : id, teacherCode, examId, name, subject, unit, count, correct, sco
 settings     : key, value
 ```
 - `spreadsheetId`는 시트가 아니라 ScriptProperties에 저장됨.
-- `settings`의 키: `schoolName`, `joinCode`, `tokenSecret`.
+- `settings`의 키: `schoolName`, `tokenSecret`. (가입코드(joinCode)는 v5.2에서 제거됨)
 
 ### 3-3. 문항 형식 (`answer_keys.questionsJson` 안의 각 항목)
 ```js
@@ -119,7 +119,7 @@ settings     : key, value
 - 토큰: `base64WebSafe(code + '|' + exp + '|' + sig)`,
   `sig = SHA-256_hex(code + '|' + exp, tokenSecret).slice(0, 32)`, 만료 `exp = now + 12시간`.
 - 교사 코드 정규화: 대문자화 후 `[A-Z0-9\-_]` 외 문자 제거(`normalizeCode_`).
-- 가입 시 학교 `joinCode` 검증, 비밀번호 6자 이상, 코드 3자 이상.
+- 가입 시 비밀번호 6자 이상, 코드 3자 이상 + 영문자 1자 이상 포함(시트 형변환 방지). 가입코드 검증은 제거됨.
 
 ### 3-8. 알려진 성능 문제 (이전의 주된 동기)
 - `listAll_`이 매 요청마다 **시트 전체를 읽음** → 데이터가 쌓이면 선형적으로 느려짐.

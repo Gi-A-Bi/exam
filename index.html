@@ -113,7 +113,7 @@
 <!-- ============ 역할 선택 ============ -->
 <div id="role-screen">
   <div class="card" style="background:#f7f7f5;border:none">
-    <h1>📝 OMR 자동 채점 시스템 <small>v5.0</small></h1>
+    <h1>📝 OMR 자동 채점 시스템 <small>v5.2</small></h1>
     <p id="school-name-display" style="font-size:14px;color:#666;margin:0">불러오는 중...</p>
   </div>
   <div class="role-pick">
@@ -157,13 +157,6 @@
 <div id="teacher-register" style="display:none">
   <div class="card">
     <p class="section-title">👨‍🏫 선생님 가입</p>
-    <p class="hint-text" style="margin-bottom:12px">학교 가입코드는 관리 선생님에게 문의하세요.</p>
-    <div class="row">
-      <div>
-        <label class="field-label">학교 가입코드</label>
-        <input type="text" id="reg-joincode" placeholder="관리 선생님에게 받은 코드" autocomplete="off" />
-      </div>
-    </div>
     <div class="row">
       <div>
         <label class="field-label">선생님 이름</label>
@@ -407,26 +400,24 @@
 
   // ===== 선생님 가입 =====
   $('#reg-btn').addEventListener('click', async () => {
-    const joinCode = $('#reg-joincode').value.trim();
     const name = $('#reg-name').value.trim();
     const code = $('#reg-code').value.trim();
     const pw = $('#reg-pw').value;
     const pw2 = $('#reg-pw2').value;
-    if (!joinCode) { $('#reg-msg').innerHTML = '<div class="msg error">학교 가입코드를 입력해주세요.</div>'; return; }
     if (!name || !code) { $('#reg-msg').innerHTML = '<div class="msg error">이름과 코드를 입력해주세요.</div>'; return; }
     if (pw.length < 6) { $('#reg-msg').innerHTML = '<div class="msg error">비밀번호는 6자 이상이어야 합니다.</div>'; return; }
     if (pw !== pw2) { $('#reg-msg').innerHTML = '<div class="msg error">비밀번호 확인이 일치하지 않습니다.</div>'; return; }
     const btn = $('#reg-btn');
     btn.disabled = true; btn.textContent = '가입 중...';
     try {
-      const r = await callApi({ action: 'register_teacher', data: { joinCode, name, code, password: pw } });
+      const r = await callApi({ action: 'register_teacher', data: { name, code, password: pw } });
       session.role = 'teacher';
       session.token = r.data.token;
       session.teacherCode = r.data.code;
       session.teacherName = r.data.name;
       $('#tn-display').textContent = session.teacherName;
       $('#tc-display').textContent = session.teacherCode;
-      ['#reg-joincode','#reg-name','#reg-code','#reg-pw','#reg-pw2'].forEach(s => $(s).value = '');
+      ['#reg-name','#reg-code','#reg-pw','#reg-pw2'].forEach(s => $(s).value = '');
       showScreen('teacher-main');
       loadAnswerKeys();
       loadAllSubmissions();
@@ -775,6 +766,8 @@
       showStudentResult(r.data);
     } catch (e) {
       $('#submit-msg').innerHTML = `<div class="msg error">${escapeHtml(e.message)}</div>`;
+    } finally {
+      // 성공 후에도 복구해야 "다른 시험 응시"에서 다시 제출 가능
       btn.disabled = false; btn.textContent = '답안 제출 & 채점';
     }
   });
@@ -967,13 +960,10 @@
           const r = await callApi({ action: 'update_submission', data: { id: sub.id, detail: sub.detail } });
           sub.correct = r.data.correct;
           sub.score = r.data.score;
-          const scoreEl = document.querySelector(`[data-score="${sub.id}"]`);
-          if (scoreEl) {
-            scoreEl.textContent = sub.score + '점';
-            scoreEl.className = 'score-badge ' + (sub.score >= 80 ? '' : sub.score >= 60 ? 'mid' : 'low');
-          }
-          exp.remove(); renderDetailExpand(row, sub);
           updateReviewBadge(); renderStats(); renderResults();
+          // 목록을 다시 그린 뒤에도 보던 상세 패널을 열어 두어 연속 정정이 가능하게 함
+          const newRow = document.querySelector(`.result-row[data-id="${sub.id}"]`);
+          if (newRow) renderDetailExpand(newRow, sub);
         } catch (err) {
           alert('수정 실패: ' + err.message);
         }
@@ -1006,8 +996,8 @@
   });
 
   // ===== 학생별 분석 =====
-  function loadAnalytics() {
-    if (allSubmissions.length === 0) loadAllSubmissions();
+  async function loadAnalytics() {
+    if (allSubmissions.length === 0) await loadAllSubmissions();
     // [FIX 4] 학생 이름이 숫자(학번 등)인 경우에도 깨지지 않도록 문자열 변환
     const names = [...new Set(allSubmissions.map(s => String(s.name)))].sort();
     const sel = $('#analytics-student');
@@ -1075,7 +1065,7 @@
     }).join('');
     const cc = pts.map(p => {
       const cls = p.score >= 80 ? '#3b6d11' : p.score >= 60 ? '#854f0b' : '#a32d2d';
-      return `<circle cx="${p.x}" cy="${p.y}" r="4" fill="${cls}"><title>${p.label}: ${p.score}점</title></circle>`;
+      return `<circle cx="${p.x}" cy="${p.y}" r="4" fill="${cls}"><title>${escapeHtml(p.label)}: ${p.score}점</title></circle>`;
     }).join('');
     return `<svg viewBox="0 0 ${w} ${h}" class="trend-chart" xmlns="http://www.w3.org/2000/svg">${gl}<path d="${path}" fill="none" stroke="#1a1a1a" stroke-width="2"/>${cc}</svg>`;
   }

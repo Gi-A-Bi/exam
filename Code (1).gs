@@ -20,7 +20,6 @@
 
 // ===== 학교 설정 =====
 const DEFAULT_SCHOOL_NAME = '서울송정초등학교';
-const DEFAULT_JOIN_CODE   = 'sjes2026';
 
 
 // ===== 메인 엔트리 =====
@@ -51,10 +50,6 @@ function doPost(e) {
 
     if (action === 'register_teacher') {
       const d = body.data || {};
-      const joinCode = getSetting_('joinCode', DEFAULT_JOIN_CODE);
-      if (!d.joinCode || d.joinCode !== joinCode) {
-        return jsonResp_({ ok: false, error: '가입코드가 일치하지 않습니다. 관리 선생님께 문의하세요.' });
-      }
       if (!d.code || !d.name || !d.password) {
         return jsonResp_({ ok: false, error: '코드, 이름, 비밀번호가 모두 필요합니다.' });
       }
@@ -64,6 +59,10 @@ function doPost(e) {
       const code = normalizeCode_(d.code);
       if (code.length < 3) {
         return jsonResp_({ ok: false, error: '코드는 영문/숫자 3자 이상이어야 합니다.' });
+      }
+      // 숫자만 있는 코드("12345")나 날짜형 코드("3-1")는 시트 저장 시 형변환되어 조회가 깨지므로 차단
+      if (!/[A-Z]/.test(code)) {
+        return jsonResp_({ ok: false, error: '코드에 영문자를 1자 이상 포함해주세요. 예: KIM01, SCIENCE3' });
       }
       const existing = findTeacher_(code);
       if (existing) {
@@ -113,7 +112,7 @@ function doPost(e) {
       const t = findTeacher_(code);
       if (!t) return jsonResp_({ ok: false, error: '존재하지 않는 선생님 코드입니다.' });
       const all = listAll_('answer_keys');
-      const safe = all.filter(function(it) { return it.teacherCode === code; })
+      const safe = all.filter(function(it) { return sameCode_(it.teacherCode, code); })
         .map(function(it) {
           const qs = parseJson_(it.questionsJson) || [];
           return {
@@ -181,7 +180,7 @@ function doPost(e) {
 
     if (action === 'list_exams') {
       var all = listAll_('answer_keys');
-      var mine = all.filter(function(it) { return it.teacherCode === myCode; })
+      var mine = all.filter(function(it) { return sameCode_(it.teacherCode, myCode); })
         .map(function(it) {
           return {
             id: it.id,
@@ -228,7 +227,7 @@ function doPost(e) {
     if (action === 'list_submissions') {
       // ★ 선생님용: 정답(correct) 포함하여 전체 detail 전달
       var allSubs = listAll_('submissions');
-      var mineSubs = allSubs.filter(function(it) { return it.teacherCode === myCode; })
+      var mineSubs = allSubs.filter(function(it) { return sameCode_(it.teacherCode, myCode); })
         .map(function(it) {
           return {
             id: it.id,
@@ -251,6 +250,9 @@ function doPost(e) {
       var sub = findSubmissionById_(d3.id, myCode);
       if (!sub) return jsonResp_({ ok: false, error: '응시 기록을 찾을 수 없습니다.' });
       var detail3 = d3.detail;
+      if (!Array.isArray(detail3)) {
+        return jsonResp_({ ok: false, error: '수정할 상세 정보(detail) 형식이 잘못되었습니다.' });
+      }
       var correct3 = 0;
       for (var k = 0; k < detail3.length; k++) {
         var x = detail3[k];
@@ -281,22 +283,12 @@ function setup() {
   getOrCreateSheet_('submissions', ['id', 'teacherCode', 'examId', 'name', 'subject', 'unit', 'count', 'correct', 'score', 'detailJson', 'submittedAt']);
   getOrCreateSheet_('settings', ['key', 'value']);
   setSetting_('schoolName', DEFAULT_SCHOOL_NAME);
-  if (!getSetting_('joinCode', null)) {
-    setSetting_('joinCode', DEFAULT_JOIN_CODE);
-  }
   if (!getSetting_('tokenSecret', null)) {
     setSetting_('tokenSecret', Utilities.getUuid());
   }
   Logger.log('=== 초기 설정 완료 ===');
   Logger.log('스프레드시트 URL: ' + ss.getUrl());
   Logger.log('현재 학교명: ' + getSetting_('schoolName'));
-  Logger.log('현재 가입코드: ' + getSetting_('joinCode'));
-}
-
-function setJoinCode() {
-  var newCode = 'sjes2026';   // ← 변경 시 여기만 수정 후 실행
-  setSetting_('joinCode', newCode);
-  Logger.log('가입코드가 변경되었습니다: ' + newCode);
 }
 
 function setSchoolName() {
@@ -351,7 +343,14 @@ function insert_(table, obj) {
   if (!obj.id) obj.id = table.charAt(0) + '_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
   var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   var row = headers.map(function(h) { return obj[h] == null ? '' : obj[h]; });
-  sheet.appendRow(row);
+  // 반 전체가 동시에 제출해도 행이 섞이지 않도록 잠금 후 기록
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    sheet.appendRow(row);
+  } finally {
+    lock.releaseLock();
+  }
   return obj;
 }
 
@@ -390,10 +389,15 @@ function getDefaultHeaders_(table) {
 
 
 // ===== 도메인 헬퍼 =====
+// 시트가 값을 숫자 등으로 형변환해 저장해도 코드가 매칭되도록 정규화 후 비교
+function sameCode_(sheetValue, code) {
+  return normalizeCode_(String(sheetValue)) === code;
+}
+
 function findTeacher_(code) {
   var all = listAll_('teachers');
   for (var i = 0; i < all.length; i++) {
-    if (all[i].code === code) return all[i];
+    if (sameCode_(all[i].code, code)) return all[i];
   }
   return null;
 }
@@ -401,7 +405,7 @@ function findTeacher_(code) {
 function getExamById_(id, teacherCode) {
   var all = listAll_('answer_keys');
   for (var i = 0; i < all.length; i++) {
-    if (all[i].id === id && all[i].teacherCode === teacherCode) {
+    if (String(all[i].id) === String(id) && sameCode_(all[i].teacherCode, teacherCode)) {
       var it = all[i];
       it.questions = parseJson_(it.questionsJson) || [];
       return it;
@@ -413,7 +417,7 @@ function getExamById_(id, teacherCode) {
 function findSubmissionById_(id, teacherCode) {
   var all = listAll_('submissions');
   for (var i = 0; i < all.length; i++) {
-    if (all[i].id === id && all[i].teacherCode === teacherCode) return all[i];
+    if (String(all[i].id) === String(id) && sameCode_(all[i].teacherCode, teacherCode)) return all[i];
   }
   return null;
 }

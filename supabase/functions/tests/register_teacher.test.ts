@@ -19,16 +19,39 @@ const VALID = {
   password: "secret1",
   name: "김민성",
   code: "KIM01",
+  school: "서울송정초등학교",
 };
 
-Deno.test("정상 가입 — 성공 + teachers/authUsers 에 1건씩", async () => {
+Deno.test("정상 가입 — 성공 + teachers/authUsers 에 1건씩 (학교명 저장)", async () => {
   const db = baseDb();
   const admin = makeAdmin(db);
   const res: any = await handleRegister({ ...VALID }, admin);
   assert(res.ok, "성공해야 함: " + JSON.stringify(res));
-  assertEquals(res.data, { code: "KIM01", name: "김민성" });
+  assertEquals(res.data, { code: "KIM01", name: "김민성", school: "서울송정초등학교" });
   assertEquals(db.teachers.length, 1);
+  assertEquals((db.teachers[0] as any).school, "서울송정초등학교");
   assertEquals(db.authUsers.length, 1);
+});
+
+Deno.test("학교명 없이도 가입 가능 (마이그레이션 전 구버전 프론트 호환) — school null", async () => {
+  const db = baseDb();
+  const admin = makeAdmin(db);
+  const { school: _omit, ...noSchool } = VALID;
+  const res: any = await handleRegister(noSchool, admin);
+  assert(res.ok, "학교명 없어도 성공해야 함: " + JSON.stringify(res));
+  assertEquals(res.data.school, null);
+  assertEquals((db.teachers[0] as any).school, null);
+});
+
+Deno.test("학교명 공백/초과 길이 정리 — trim 후 40자 제한", async () => {
+  const db = baseDb();
+  const admin = makeAdmin(db);
+  const res: any = await handleRegister({ ...VALID, school: "  " + "가".repeat(60) + "  " }, admin);
+  assert(res.ok);
+  assertEquals((db.teachers[0] as any).school, "가".repeat(40));
+  const res2: any = await handleRegister({ ...VALID, email: "t2@school.kr", code: "KIM02", school: "   " }, makeAdmin(baseDb()));
+  assert(res2.ok);
+  assertEquals(res2.data.school, null, "공백만 있으면 null 저장");
 });
 
 Deno.test("코드 중복 → 거부 (auth 사용자 생성 전에 차단)", async () => {

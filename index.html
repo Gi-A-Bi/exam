@@ -162,6 +162,10 @@
         <label class="field-label">이메일 (로그인 ID)</label>
         <input type="email" id="reg-email" placeholder="teacher@school.kr" autocomplete="username" />
       </div>
+      <div>
+        <label class="field-label">학교 이름</label>
+        <input type="text" id="reg-school" placeholder="예: 서울송정초등학교" autocomplete="off" />
+      </div>
     </div>
     <div class="row">
       <div>
@@ -207,6 +211,7 @@
         <select id="stu-class"><option value="">코드 입력 후 선택</option></select>
       </div>
     </div>
+    <div id="stu-teacher-info" class="header-info" style="display:none"></div>
     <div class="row">
       <div>
         <label class="field-label">본인 이름</label>
@@ -229,7 +234,7 @@
 <!-- ============ 선생님 메인 ============ -->
 <div id="teacher-main" style="display:none">
   <div class="banner">
-    <div>👨‍🏫 <strong id="tn-display"></strong> 선생님 · 학생 응시 코드: <code id="tc-display"></code></div>
+    <div>👨‍🏫 <span id="ts-display" style="color:#555"></span><strong id="tn-display"></strong> 선생님 · 학생 응시 코드: <code id="tc-display"></code></div>
     <button class="btn-secondary" id="logout-btn" type="button">로그아웃</button>
   </div>
   <div class="tabs">
@@ -431,11 +436,16 @@
     session = {}; showScreen('role-screen');
   });
 
-  // 로그인한 교사 본인의 공개 프로필(code, name) 조회.
+  // 로그인한 교사 본인의 공개 프로필(code, name, school) 조회.
   // teachers RLS 정책 "teacher reads own profile"(auth.uid()=id)로 본인 행만 읽힘.
   async function fetchOwnTeacherProfile(userId) {
-    const { data, error } = await sb()
-      .from('teachers').select('code,name').eq('id', userId).maybeSingle();
+    let { data, error } = await sb()
+      .from('teachers').select('code,name,school').eq('id', userId).maybeSingle();
+    if (error) {
+      // school 컬럼 마이그레이션이 아직 안 된 DB 호환: 기본 필드로 재시도
+      ({ data, error } = await sb()
+        .from('teachers').select('code,name').eq('id', userId).maybeSingle());
+    }
     if (error) throw new Error(error.message);
     if (!data) throw new Error('교사 프로필을 찾을 수 없습니다. 가입이 완료되었는지 확인하세요.');
     return data;
@@ -443,17 +453,41 @@
 
   // 로그인/가입 성공 후 공통 처리: 세션 세팅 + 화면 전환.
   // 반 목록을 먼저 로드해야 정답지/결과의 반 이름 라벨이 첫 렌더부터 정확함.
-  async function enterTeacherMain(code, name, teacherId) {
+  async function enterTeacherMain(code, name, teacherId, school) {
     session.role = 'teacher';
     session.teacherId = teacherId; // auth.uid() — answer_keys insert 시 RLS check 에 사용
     session.teacherCode = code;
     session.teacherName = name;
+    session.teacherSchool = school || '';
+    renderTeacherSchool();
     $('#tn-display').textContent = name;
     $('#tc-display').textContent = code;
     showScreen('teacher-main');
     await loadClasses();
     loadAnswerKeys();
     loadAllSubmissions();
+  }
+
+  // 배너의 학교명 표시. 기존 계정(학교명 미설정)은 [학교명 설정]으로 채울 수 있음.
+  function renderTeacherSchool() {
+    const el = $('#ts-display');
+    if (session.teacherSchool) {
+      el.textContent = session.teacherSchool + ' ';
+      return;
+    }
+    el.innerHTML = '<button class="btn-link" id="set-school-btn" type="button" style="font-size:12px;padding:0">학교명 설정</button> ';
+    $('#set-school-btn').addEventListener('click', async () => {
+      const v = (prompt('학교 이름을 입력해주세요. (학생이 선생님을 찾을 때 표시돼요)') || '').trim().slice(0, 40);
+      if (v.length < 2) return;
+      try {
+        const { error } = await sb().from('teachers').update({ school: v }).eq('id', session.teacherId);
+        if (error) throw new Error(error.message);
+        session.teacherSchool = v;
+        renderTeacherSchool();
+      } catch (e) {
+        alert('저장 실패: ' + e.message + '\n(DB에 school 컬럼 마이그레이션이 적용되었는지 확인하세요)');
+      }
+    });
   }
 
   // ===== 선생님 로그인 (Supabase Auth: 이메일+비밀번호) =====
@@ -468,7 +502,7 @@
       if (error) throw new Error(error.message);
       const prof = await fetchOwnTeacherProfile(data.user.id);
       $('#login-email').value = ''; $('#login-pw').value = '';
-      enterTeacherMain(prof.code, prof.name, data.user.id);
+      enterTeacherMain(prof.code, prof.name, data.user.id, prof.school);
     } catch (e) {
       $('#login-msg').innerHTML = `<div class="msg error">${escapeHtml(e.message)}</div>`;
     } finally {
@@ -480,11 +514,13 @@
   // ===== 선생님 가입 (register_teacher Edge Function → 이어서 로그인) =====
   $('#reg-btn').addEventListener('click', async () => {
     const email = $('#reg-email').value.trim();
+    const school = $('#reg-school').value.trim();
     const name = $('#reg-name').value.trim();
     const code = $('#reg-code').value.trim();
     const pw = $('#reg-pw').value;
     const pw2 = $('#reg-pw2').value;
     if (!email) { $('#reg-msg').innerHTML = '<div class="msg error">이메일을 입력해주세요.</div>'; return; }
+    if (school.length < 2) { $('#reg-msg').innerHTML = '<div class="msg error">학교 이름을 입력해주세요. (학생이 선생님을 찾을 때 표시돼요)</div>'; return; }
     if (!name || !code) { $('#reg-msg').innerHTML = '<div class="msg error">이름과 코드를 입력해주세요.</div>'; return; }
     if (pw.length < 6) { $('#reg-msg').innerHTML = '<div class="msg error">비밀번호는 6자 이상이어야 합니다.</div>'; return; }
     if (pw !== pw2) { $('#reg-msg').innerHTML = '<div class="msg error">비밀번호 확인이 일치하지 않습니다.</div>'; return; }
@@ -493,7 +529,7 @@
     try {
       // 1) register_teacher Edge Function 호출 (코드중복 확인·auth 생성은 서버에서)
       const { data, error } = await sb().functions.invoke('register_teacher', {
-        body: { email, password: pw, name, code }
+        body: { email, password: pw, name, code, school }
       });
       if (error) throw new Error(error.message);
       if (!data || !data.ok) throw new Error((data && data.error) || '가입에 실패했습니다.');
@@ -502,8 +538,8 @@
       const { data: sess, error: sErr } = await sb().auth.signInWithPassword({ email, password: pw });
       if (sErr) throw new Error(sErr.message);
 
-      ['#reg-email','#reg-name','#reg-code','#reg-pw','#reg-pw2'].forEach(s => $(s).value = '');
-      enterTeacherMain(data.data.code, data.data.name, sess.user.id);
+      ['#reg-email','#reg-school','#reg-name','#reg-code','#reg-pw','#reg-pw2'].forEach(s => $(s).value = '');
+      enterTeacherMain(data.data.code, data.data.name, sess.user.id, data.data.school);
     } catch (e) {
       $('#reg-msg').innerHTML = `<div class="msg error">${escapeHtml(e.message)}</div>`;
     } finally {
@@ -517,10 +553,23 @@
   async function loadClassesForCode() {
     const code = $('#stu-code').value.trim();
     const sel = $('#stu-class');
-    if (!code) { sel.innerHTML = '<option value="">코드 입력 후 선택</option>'; return; }
+    const info = $('#stu-teacher-info');
+    if (!code) { sel.innerHTML = '<option value="">코드 입력 후 선택</option>'; info.style.display = 'none'; return; }
     try {
-      const { data, error } = await sb().rpc('list_classes_public', { p_teacher_code: code });
+      // 반 목록과 함께 어느 학교의 어느 선생님인지 보여줘 코드 오입력·혼동을 줄임
+      const [clsRes, tRes] = await Promise.all([
+        sb().rpc('list_classes_public', { p_teacher_code: code }),
+        sb().rpc('get_teacher_public', { p_code: code })
+      ]);
+      const { data, error } = clsRes;
       if (error) throw new Error(error.message);
+      const t = !tRes.error ? (Array.isArray(tRes.data) ? tRes.data[0] : tRes.data) : null;
+      if (t) {
+        info.textContent = '🏫 ' + (t.school ? t.school + ' · ' : '') + t.name + ' 선생님이 맞는지 확인하세요.';
+        info.style.display = '';
+      } else {
+        info.style.display = 'none';
+      }
       const classes = data || [];
       if (classes.length === 0) {
         sel.innerHTML = '<option value="">등록된 반이 없어요 (코드 확인)</option>';
@@ -530,6 +579,7 @@
       }
     } catch (_) {
       sel.innerHTML = '<option value="">반 목록을 불러오지 못했어요</option>';
+      info.style.display = 'none';
     }
   }
   $('#stu-code').addEventListener('input', () => {
@@ -570,13 +620,14 @@
       session.studentName = name;
       session.studentTeacherCode = teacher.code;
       session.studentTeacherName = teacher.name;
+      session.studentTeacherSchool = teacher.school || '';
       session.studentClassId = classId;
       session.studentClassName = className;
       session.studentPin = pin;                          // 메모리 보관 (제출 시 재검증용)
       try { sessionStorage.setItem('omr_pin_v1', pin); } catch (_) {}  // 새로고침 이어하기용(탭 닫으면 소멸)
 
       $('#stu-name-display').textContent = name;
-      $('#stu-code-display').textContent = teacher.code + ' · ' + className + ' (' + teacher.name + ' 선생님)';
+      $('#stu-code-display').textContent = teacher.code + ' · ' + className + ' (' + (teacher.school ? teacher.school + ' ' : '') + teacher.name + ' 선생님)';
       $('#stu-code').value = ''; $('#stu-name').value = ''; $('#stu-pin').value = '';
       $('#result-area').style.display = 'none';
       $('#stu-exam-card').style.display = '';
@@ -1085,6 +1136,7 @@
         name: session.studentName,
         code: session.studentTeacherCode,
         teacherName: session.studentTeacherName,
+        teacherSchool: session.studentTeacherSchool || '',
         classId: session.studentClassId,
         className: session.studentClassName,
         examId: examId || null
@@ -1721,7 +1773,7 @@
       const { data } = await sb().auth.getSession();
       if (data && data.session) {
         const prof = await fetchOwnTeacherProfile(data.session.user.id);
-        enterTeacherMain(prof.code, prof.name, data.session.user.id);
+        enterTeacherMain(prof.code, prof.name, data.session.user.id, prof.school);
         return;
       }
     } catch (_) { /* 세션 없음/실패 → 학생 복원 시도 */ }
@@ -1747,11 +1799,12 @@
         session.studentName = st.name;
         session.studentTeacherCode = st.code;
         session.studentTeacherName = st.teacherName || '';
+        session.studentTeacherSchool = st.teacherSchool || '';
         session.studentClassId = st.classId;
         session.studentClassName = st.className || '';
         session.studentPin = pin;
         $('#stu-name-display').textContent = st.name;
-        $('#stu-code-display').textContent = st.code + (st.className ? ' · ' + st.className : '') + (st.teacherName ? ' (' + st.teacherName + ' 선생님)' : '');
+        $('#stu-code-display').textContent = st.code + (st.className ? ' · ' + st.className : '') + (st.teacherName ? ' (' + (st.teacherSchool ? st.teacherSchool + ' ' : '') + st.teacherName + ' 선생님)' : '');
         $('#result-area').style.display = 'none';
         $('#stu-exam-card').style.display = '';
         $('#omr-card').style.display = 'none';

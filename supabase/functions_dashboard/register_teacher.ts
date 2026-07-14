@@ -52,15 +52,20 @@ export interface RegisterInput {
   password?: string;
   name?: string;
   code?: string;
+  school?: string;
 }
 
 // admin: supabase service_role 클라이언트 (또는 동일 인터페이스의 테스트 더블)
 export async function handleRegister(input: RegisterInput, admin: any) {
-  const { email, password, name, code } = input ?? {};
+  const { email, password, name, code, school } = input ?? {};
 
   // 1. 입력 검증
   if (!name || !email || !password) return { ok: false, error: "필수 항목 누락" };
   if (password.length < 6)          return { ok: false, error: "비밀번호는 6자 이상" };
+
+  // 학교명: 프론트는 필수로 받지만 서버는 선택 처리(마이그레이션 전 구버전 프론트 호환).
+  // 없으면 null 저장 → 교사 화면의 [학교명 설정]으로 나중에 채울 수 있음.
+  const nschool = String(school ?? "").trim().slice(0, 40) || null;
 
   // 2. 코드 정규화·길이
   const ncode = normalizeCode(code ?? "");
@@ -79,14 +84,14 @@ export async function handleRegister(input: RegisterInput, admin: any) {
 
   // 5. 프로필 insert. 실패 시 4에서 만든 auth 사용자 삭제(롤백).
   const { error: pErr } = await admin.from("teachers")
-    .insert({ id: created.user.id, code: ncode, name: name.trim() });
+    .insert({ id: created.user.id, code: ncode, name: name.trim(), school: nschool });
   if (pErr) {
     await admin.auth.admin.deleteUser(created.user.id);  // 롤백
     return { ok: false, error: pErr.message };
   }
 
   // 6. 성공
-  return { ok: true, data: { code: ncode, name: name.trim() } };
+  return { ok: true, data: { code: ncode, name: name.trim(), school: nschool } };
 }
 
 // ===== register_teacher/index.ts (진입점) =====

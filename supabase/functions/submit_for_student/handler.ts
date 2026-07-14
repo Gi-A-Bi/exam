@@ -7,6 +7,7 @@ import { gradeSubmission_ } from "../_shared/grading.js";
 export interface SubmitInput {
   examId?: string;
   classId?: string;
+  number?: number | string;
   name?: string;
   pin?: string;
   answers?: Array<{ q: number; answer: unknown }>;
@@ -28,22 +29,25 @@ const ALREADY_SUBMITTED_MSG =
   "이미 제출한 시험입니다. 제출한 결과는 수정할 수 없어요. (문의는 선생님께)";
 
 export async function handleSubmit(input: SubmitInput, admin: any) {
-  const { examId, classId, name, pin, answers } = input ?? {};
+  const { examId, classId, number, name, pin, answers } = input ?? {};
 
   // 1. 입력 검증 (+ 익명 경로 하드닝: 이름 길이·답안 개수 상한)
-  if (!examId || !classId || !name || !pin || !Array.isArray(answers))
+  if (!examId || !classId || number == null || !name || !pin || !Array.isArray(answers))
     return { ok: false, error: "필수 항목 누락" };
   const studentName = String(name).trim();
+  const studentNumber = parseInt(String(number), 10);
   if (!studentName) return { ok: false, error: "이름을 입력해주세요." };
   if (studentName.length > 50) return { ok: false, error: "이름이 너무 깁니다." };
+  if (!(studentNumber >= 1 && studentNumber <= 999))
+    return { ok: false, error: "번호가 올바르지 않습니다." };
   if (answers.length > 500) return { ok: false, error: "답안 항목이 너무 많습니다." };
 
-  // 2. 학생 PIN 재검증 (DB 함수 student_verify — 해시 비교 단일 소스)
+  // 2. 학생 PIN 재검증 (DB 함수 student_verify — 번호+PIN, 해시 비교 단일 소스)
   const { data: studentId, error: vErr } = await admin
-    .rpc("student_verify", { p_class_id: classId, p_name: studentName, p_pin: String(pin) });
+    .rpc("student_verify", { p_class_id: classId, p_number: studentNumber, p_pin: String(pin) });
   if (vErr) return { ok: false, error: vErr.message };
   if (!studentId)
-    return { ok: false, error: "이름 또는 PIN이 올바르지 않습니다. (PIN 분실 시 선생님께 초기화 요청)" };
+    return { ok: false, error: "번호 또는 PIN이 올바르지 않습니다. (PIN 분실 시 선생님께 초기화 요청)" };
 
   // 3. 반 → 교사 확인
   const { data: cls } = await admin.from("classes")
@@ -70,6 +74,7 @@ export async function handleSubmit(input: SubmitInput, admin: any) {
   //    insert 실패를 삼키면 학생에겐 점수가 보이지만 교사쪽엔 저장 안 되는 유실이 발생 → 반드시 검사.
   const { error: insErr } = await admin.from("submissions").insert({
     teacher_id: cls.teacher_id, exam_id: examId, name: studentName,
+    number: studentNumber,
     class_id: classId, student_id: studentId,
     subject: exam.subject, unit: exam.unit,
     count: graded.count, correct: graded.correct, score: graded.score,

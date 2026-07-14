@@ -136,10 +136,13 @@ const json = (o: unknown) =>
 >   교사가 해당 제출 행을 삭제하면 재제출 가능.
 
 ### Request (v2)
+> 결정(2026-07-14): 학생 식별을 (반, 번호)로 전환. 요청에 `number`(1~999) 추가.
+> `student_verify`는 (반, 번호, PIN)로 재검증. 이름은 표시용(동명이인 허용).
 ```json
 {
   "examId": "uuid",
   "classId": "uuid",
+  "number": 5,
   "name": "홍길동",
   "pin": "1234",
   "answers": [

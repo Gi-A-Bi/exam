@@ -213,6 +213,10 @@
     </div>
     <div id="stu-teacher-info" class="header-info" style="display:none"></div>
     <div class="row">
+      <div style="max-width:100px;flex:0 0 100px">
+        <label class="field-label">번호</label>
+        <input type="number" id="stu-number" placeholder="예: 5" min="1" max="999" inputmode="numeric" autocomplete="off" />
+      </div>
       <div>
         <label class="field-label">본인 이름</label>
         <input type="text" id="stu-name" placeholder="이름 입력" autocomplete="off" />
@@ -294,11 +298,21 @@
         <select id="filter-name"><option value="">전체 학생</option></select>
         <label class="filter-toggle" id="filter-review-label"><input type="checkbox" id="filter-review" />⚠ 검토 필요만</label>
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
         <span style="font-size:12px;color:#666" id="result-count">0건</span>
-        <div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <label style="font-size:12px;color:#666">정렬</label>
+          <select id="sort-results" style="width:auto;padding:6px 8px;font-size:13px">
+            <option value="date_desc">최신순</option>
+            <option value="date_asc">오래된순</option>
+            <option value="number_asc">번호순 ↑</option>
+            <option value="number_desc">번호순 ↓</option>
+            <option value="name_asc">이름순 (가나다)</option>
+            <option value="score_desc">점수 높은순</option>
+            <option value="score_asc">점수 낮은순</option>
+          </select>
           <button class="btn-secondary" id="refresh-results" type="button">새로고침</button>
-          <button class="btn-secondary" id="export-csv" type="button" style="margin-left:6px">CSV 내보내기</button>
+          <button class="btn-secondary" id="export-csv" type="button">CSV 내보내기</button>
         </div>
       </div>
       <div id="results-list"><div class="loading">불러오는 중...</div></div>
@@ -593,10 +607,12 @@
   $('#stu-enter').addEventListener('click', async () => {
     const code = $('#stu-code').value.trim();
     const classId = $('#stu-class').value;
+    const number = parseInt($('#stu-number').value, 10);
     const name = $('#stu-name').value.trim();
     const pin = $('#stu-pin').value.trim();
     if (!code || !name) { $('#stu-msg').innerHTML = '<div class="msg error">코드와 이름을 입력해주세요.</div>'; return; }
     if (!classId) { $('#stu-msg').innerHTML = '<div class="msg error">반을 선택해주세요.</div>'; return; }
+    if (!(number >= 1 && number <= 999)) { $('#stu-msg').innerHTML = '<div class="msg error">번호를 1~999 사이 숫자로 입력해주세요.</div>'; return; }
     if (!/^[0-9]{4,8}$/.test(pin)) { $('#stu-msg').innerHTML = '<div class="msg error">PIN은 4~8자리 숫자로 입력해주세요.</div>'; return; }
     const btn = $('#stu-enter');
     btn.disabled = true; btn.textContent = '확인 중...';
@@ -609,7 +625,7 @@
 
       // 입장/등록 — 첫 입장이면 지금 PIN 이 내 PIN 으로 설정됨 (C안)
       const { data: eData, error: eErr } = await sb().rpc('student_enter', {
-        p_class_id: classId, p_name: name, p_pin: pin
+        p_class_id: classId, p_number: number, p_name: name, p_pin: pin
       });
       if (eErr) throw new Error(eErr.message);   // PIN 불일치 등
       const entered = Array.isArray(eData) ? eData[0] : eData;
@@ -617,6 +633,7 @@
 
       const className = $('#stu-class').options[$('#stu-class').selectedIndex].text;
       session.role = 'student';
+      session.studentNumber = number;
       session.studentName = name;
       session.studentTeacherCode = teacher.code;
       session.studentTeacherName = teacher.name;
@@ -626,9 +643,9 @@
       session.studentPin = pin;                          // 메모리 보관 (제출 시 재검증용)
       try { sessionStorage.setItem('omr_pin_v1', pin); } catch (_) {}  // 새로고침 이어하기용(탭 닫으면 소멸)
 
-      $('#stu-name-display').textContent = name;
+      $('#stu-name-display').textContent = number + '번 ' + name;
       $('#stu-code-display').textContent = teacher.code + ' · ' + className + ' (' + (teacher.school ? teacher.school + ' ' : '') + teacher.name + ' 선생님)';
-      $('#stu-code').value = ''; $('#stu-name').value = ''; $('#stu-pin').value = '';
+      $('#stu-code').value = ''; $('#stu-number').value = ''; $('#stu-name').value = ''; $('#stu-pin').value = '';
       $('#result-area').style.display = 'none';
       $('#stu-exam-card').style.display = '';
       $('#omr-card').style.display = 'none';
@@ -647,7 +664,7 @@
       btn.disabled = false; btn.textContent = '입장';
     }
   });
-  ['#stu-code','#stu-name','#stu-pin'].forEach(s => $(s).addEventListener('keypress', e => { if (e.key === 'Enter') $('#stu-enter').click(); }));
+  ['#stu-code','#stu-number','#stu-name','#stu-pin'].forEach(s => $(s).addEventListener('keypress', e => { if (e.key === 'Enter') $('#stu-enter').click(); }));
 
   // ===== 탭 전환 =====
   document.addEventListener('click', function(e) {
@@ -762,8 +779,8 @@
     try {
       // RLS 로 본인 학생만. pin_hash 값 자체는 해시라 노출돼도 원문 PIN 은 알 수 없음.
       const { data, error } = await sb().from('students')
-        .select('id, name, pin_hash, createdAt:created_at').eq('class_id', classId)
-        .order('name', { ascending: true });
+        .select('id, name, number, pin_hash, createdAt:created_at').eq('class_id', classId)
+        .order('number', { ascending: true, nullsFirst: false });
       if (error) throw new Error(error.message);
       const students = data || [];
       if (students.length === 0) {
@@ -772,7 +789,7 @@
       }
       box.innerHTML = students.map(s => `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-bottom:1px solid #eee;font-size:13px">
-          <span>👧 ${escapeHtml(s.name)} <span style="font-size:11px;color:${s.pin_hash ? '#3b6d11' : '#a32d2d'}">${s.pin_hash ? 'PIN 설정됨' : 'PIN 미설정 (다음 입장 때 새로 설정)'}</span></span>
+          <span>👧 <strong>${s.number != null ? escapeHtml(String(s.number)) + '번' : '번호없음'}</strong> ${escapeHtml(s.name)} <span style="font-size:11px;color:${s.pin_hash ? '#3b6d11' : '#a32d2d'}">${s.pin_hash ? 'PIN 설정됨' : 'PIN 미설정 (다음 입장 때 새로 설정)'}</span></span>
           <span>
             <button class="btn-secondary" data-reset-pin="${escapeHtml(s.id)}" type="button" style="font-size:11px;padding:4px 8px">PIN 초기화</button>
             <button class="btn-danger" data-del-student="${escapeHtml(s.id)}" type="button" style="font-size:11px;padding:4px 8px;margin-left:4px">삭제</button>
@@ -1152,12 +1169,13 @@
 
   function draftKey() {
     return 'omr_draft_v2:' + (session.studentClassId || '') + '|' +
-           (currentExam ? currentExam.id : '') + '|' + (session.studentName || '');
+           (currentExam ? currentExam.id : '') + '|' + (session.studentNumber || '') + '|' + (session.studentName || '');
   }
 
   function saveStudentState(examId) {
     try {
       localStorage.setItem(STUDENT_STATE_KEY, JSON.stringify({
+        number: session.studentNumber,
         name: session.studentName,
         code: session.studentTeacherCode,
         teacherName: session.studentTeacherName,
@@ -1315,7 +1333,7 @@
     try {
       const { data, error } = await sb().rpc('student_history', {
         p_class_id: session.studentClassId,
-        p_name: session.studentName,
+        p_number: session.studentNumber,
         p_pin: session.studentPin
       });
       if (error) throw new Error(error.message);
@@ -1384,6 +1402,7 @@
         body: {
           examId: currentExam.id,
           classId: session.studentClassId,
+          number: session.studentNumber,
           name: session.studentName,
           pin: session.studentPin,
           answers
@@ -1464,7 +1483,7 @@
       // list_submissions → submissions 직접 select. RLS(teacher reads own submissions)로 본인 것만.
       // submitted_at → submittedAt 로 alias 해 기존 렌더링/정렬 코드를 그대로 유지.
       const { data, error } = await sb().from('submissions')
-        .select('id, name, subject, unit, count, correct, score, detail, class_id, submittedAt:submitted_at')
+        .select('id, name, number, subject, unit, count, correct, score, detail, class_id, submittedAt:submitted_at')
         .order('submitted_at', { ascending: false });
       if (error) throw new Error(error.message);
       allSubmissions = data || [];
@@ -1504,7 +1523,7 @@
     const s = $('#filter-subject').value, u = $('#filter-unit').value, n = $('#filter-name').value;
     const c = $('#filter-class').value;
     const r = $('#filter-review').checked;
-    return allSubmissions.filter(x => {
+    const rows = allSubmissions.filter(x => {
       // [FIX 4] 구글시트가 "4" 같은 단원명을 숫자 4로 저장해 버려서 ===로 비교하면 영영 안 맞음 → 문자열 변환 후 비교
       if (c && String(x.class_id) !== String(c)) return false;
       if (s && String(x.subject) !== String(s)) return false;
@@ -1513,6 +1532,25 @@
       if (r && !(x.detail||[]).some(d => d.needsReview && d.manualOverride == null)) return false;
       return true;
     });
+    return sortResults(rows);
+  }
+
+  function sortResults(rows) {
+    const mode = ($('#sort-results') && $('#sort-results').value) || 'date_desc';
+    const num = (x) => (x.number == null ? Infinity : Number(x.number));  // 번호 없는 건 뒤로
+    const arr = rows.slice();
+    arr.sort((a, b) => {
+      switch (mode) {
+        case 'date_asc':    return String(a.submittedAt).localeCompare(String(b.submittedAt));
+        case 'number_asc':  return num(a) - num(b) || String(a.name).localeCompare(String(b.name), 'ko');
+        case 'number_desc': return num(b) - num(a) || String(a.name).localeCompare(String(b.name), 'ko');
+        case 'name_asc':    return String(a.name).localeCompare(String(b.name), 'ko') || num(a) - num(b);
+        case 'score_desc':  return b.score - a.score || num(a) - num(b);
+        case 'score_asc':   return a.score - b.score || num(a) - num(b);
+        default:            return String(b.submittedAt).localeCompare(String(a.submittedAt)); // date_desc
+      }
+    });
+    return arr;
   }
 
   function effectiveCorrect(d) { return d.manualOverride != null ? d.manualOverride : d.isCorrect; }
@@ -1544,8 +1582,9 @@
         const rv = (s.detail||[]).filter(x => x.needsReview && x.manualOverride == null).length;
         const rm = rv > 0 ? `<span class="review-flag">⚠ ${rv}</span>` : '';
         const clsName = s.class_id ? classNameById(s.class_id) : '';
+        const numTag = s.number != null ? `<span style="color:#666;font-weight:600">${escapeHtml(String(s.number))}번</span> ` : '';
         return `<div class="result-row" data-id="${escapeHtml(s.id)}" style="cursor:pointer">
-          <div><strong>${escapeHtml(s.name)}</strong>${clsName ? `<div style="font-size:10px;color:#999">${escapeHtml(clsName)}</div>` : ''}</div>
+          <div>${numTag}<strong>${escapeHtml(s.name)}</strong>${clsName ? `<div style="font-size:10px;color:#999">${escapeHtml(clsName)}</div>` : ''}</div>
           <div>${escapeHtml(s.subject)}</div>
           <div style="font-size:12px;color:#666">${escapeHtml(s.unit)}</div>
           <div><span class="score-badge ${cls}" data-score="${escapeHtml(s.id)}">${s.score}점</span></div>
@@ -1647,14 +1686,15 @@
     $('#filter-review-label').classList.toggle('active', e.target.checked);
     renderStats(); renderResults();
   });
+  $('#sort-results').addEventListener('change', renderResults);   // 정렬만 바뀌면 통계는 그대로
 
   $('#export-csv').addEventListener('click', () => {
     const d = getFiltered();
     if (d.length === 0) { alert('내보낼 데이터가 없습니다.'); return; }
-    const header = ['이름','반','과목','단원','문항수','맞은개수','점수','검토필요','제출일시'];
+    const header = ['번호','이름','반','과목','단원','문항수','맞은개수','점수','검토필요','제출일시'];
     const rows = d.map(s => {
       const r = (s.detail||[]).filter(x => x.needsReview && x.manualOverride == null).length;
-      return [s.name, s.class_id ? classNameById(s.class_id) : '', s.subject, s.unit, s.count, s.correct, s.score, r > 0 ? 'Y' : '', s.submittedAt];
+      return [s.number != null ? s.number : '', s.name, s.class_id ? classNameById(s.class_id) : '', s.subject, s.unit, s.count, s.correct, s.score, r > 0 ? 'Y' : '', s.submittedAt];
     });
     const csv = '\uFEFF' + [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -1722,7 +1762,10 @@
   }
 
   // 학생 구분 키: 반이 다르면 동명이인도 다른 학생 (반 미지정 옛 데이터는 이름만으로 묶임)
-  function studentKey(s) { return (s.class_id || '') + '|' + String(s.name); }
+  // 번호가 있으면 (반|번호)로 식별해 동명이인을 구분. 번호 없는 옛 기록은 이름 기준.
+  function studentKey(s) {
+    return (s.class_id || '') + '|' + (s.number != null ? 'n' + s.number : 'name:' + String(s.name));
+  }
 
   function loadAnalytics() {
     if (allSubmissions.length === 0) loadAllSubmissions();
@@ -1730,8 +1773,9 @@
     allSubmissions.forEach(s => { const k = studentKey(s); if (!seen.has(k)) seen.set(k, s); });
     const opts = [...seen.entries()].map(([key, s]) => ({
       key,
-      label: String(s.name) + (s.class_id ? ' (' + (classNameById(s.class_id) || '반') + ')' : '')
-    })).sort((a, b) => a.label.localeCompare(b.label, 'ko'));
+      num: s.number == null ? Infinity : Number(s.number),
+      label: (s.number != null ? s.number + '번 ' : '') + String(s.name) + (s.class_id ? ' (' + (classNameById(s.class_id) || '반') + ')' : '')
+    })).sort((a, b) => (a.num - b.num) || a.label.localeCompare(b.label, 'ko'));
     const sel = $('#analytics-student');
     const cur = sel.value;
     sel.innerHTML = '<option value="">학생을 선택하세요</option>' + opts.map(o => `<option value="${escapeHtml(o.key)}">${escapeHtml(o.label)}</option>`).join('');
@@ -1771,7 +1815,7 @@
     const subjFilter = $('#analytics-subject').value;
     const subs = subjFilter ? all.filter(s => String(s.subject) === subjFilter) : all;
     if (subs.length === 0) { $('#analytics-content').innerHTML = '<div class="card"><div class="empty">해당 과목 기록 없음</div></div>'; return; }
-    const dispName = String(all[0].name) + (all[0].class_id ? ' (' + (classNameById(all[0].class_id) || '반') + ')' : '');
+    const dispName = (all[0].number != null ? all[0].number + '번 ' : '') + String(all[0].name) + (all[0].class_id ? ' (' + (classNameById(all[0].class_id) || '반') + ')' : '');
     const avg = Math.round(subs.reduce((a, c) => a + c.score, 0) / subs.length);
     const max = Math.max(...subs.map(s => s.score));
     const min = Math.min(...subs.map(s => s.score));
@@ -1824,13 +1868,14 @@
     // 2) 학생: 저장된 응시 상태가 있으면 시험 선택·임시답안까지 복원
     try {
       const st = JSON.parse(localStorage.getItem(STUDENT_STATE_KEY) || 'null');
-      if (st && st.name && st.code && st.classId) {
+      if (st && st.name && st.code && st.classId && st.number) {
         let pin = '';
         try { pin = sessionStorage.getItem('omr_pin_v1') || ''; } catch (_) {}
         if (!pin) {
-          // PIN 은 탭이 닫히면 소멸 → 입장 화면에 코드/이름을 채워두고 PIN 만 다시 받는다.
+          // PIN 은 탭이 닫히면 소멸 → 입장 화면에 코드/번호/이름을 채워두고 PIN 만 다시 받는다.
           // 임시답안(localStorage)은 그대로 남아 있어 재입장하면 이어서 작성된다.
           $('#stu-code').value = st.code;
+          $('#stu-number').value = st.number;
           $('#stu-name').value = st.name;
           showScreen('student-login');
           $('#stu-msg').innerHTML = '<div class="msg info">이어서 응시하려면 반을 선택하고 PIN을 다시 입력해주세요. 작성 중이던 답안은 그대로 남아 있어요.</div>';
@@ -1839,6 +1884,7 @@
           return;
         }
         session.role = 'student';
+        session.studentNumber = st.number;
         session.studentName = st.name;
         session.studentTeacherCode = st.code;
         session.studentTeacherName = st.teacherName || '';
@@ -1846,7 +1892,7 @@
         session.studentClassId = st.classId;
         session.studentClassName = st.className || '';
         session.studentPin = pin;
-        $('#stu-name-display').textContent = st.name;
+        $('#stu-name-display').textContent = (st.number ? st.number + '번 ' : '') + st.name;
         $('#stu-code-display').textContent = st.code + (st.className ? ' · ' + st.className : '') + (st.teacherName ? ' (' + (st.teacherSchool ? st.teacherSchool + ' ' : '') + st.teacherName + ' 선생님)' : '');
         $('#result-area').style.display = 'none';
         $('#stu-exam-card').style.display = '';

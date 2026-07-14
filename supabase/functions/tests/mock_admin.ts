@@ -7,7 +7,7 @@ export interface MockDb {
   settings: Array<{ key: string; value: string }>;
   teachers: Array<{ id: string; code: string; name: string }>;
   classes?: Array<{ id: string; teacher_id: string; name: string }>;
-  students?: Array<{ id: string; class_id: string; name: string; pin: string | null }>;
+  students?: Array<{ id: string; class_id: string; name: string; number?: number; pin: string | null }>;
   answer_keys: Array<any>;
   submissions: Array<any>;     // insert 결과가 쌓임
   authUsers: Array<{ id: string; email: string }>;  // createUser 결과가 쌓임
@@ -18,12 +18,11 @@ export interface MockDb {
 let __id = 0;
 const nextId = () => "user-" + (++__id);
 
-// 실제 student_verify(SQL)와 동일 규칙의 테스트 더블: trim 매칭 + pin 일치 시 id, 아니면 null.
+// 실제 student_verify(SQL)와 동일 규칙의 테스트 더블: (반, 번호) 매칭 + pin 일치 시 id, 아니면 null.
 export function makeStudentVerify(db: MockDb) {
   return (args: any) => {
-    const name = String(args.p_name ?? "").trim();
     const s = (db.students ?? []).find(
-      (x) => x.class_id === args.p_class_id && x.name === name,
+      (x) => x.class_id === args.p_class_id && x.number === Number(args.p_number),
     );
     if (!s || s.pin == null || s.pin !== String(args.p_pin)) return null;
     return s.id;

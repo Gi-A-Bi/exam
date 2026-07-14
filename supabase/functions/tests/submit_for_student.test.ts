@@ -14,8 +14,8 @@ function baseDb(): MockDb {
       { id: "class-2", teacher_id: "t1", name: "2026 4반" },
     ],
     students: [
-      { id: "stu-1", class_id: "class-1", name: "홍길동", pin: "1234" },
-      { id: "stu-2", class_id: "class-2", name: "홍길동", pin: "9999" }, // 다른 반 동명이인
+      { id: "stu-1", class_id: "class-1", name: "홍길동", number: 3, pin: "1234" },
+      { id: "stu-2", class_id: "class-2", name: "홍길동", number: 3, pin: "9999" }, // 다른 반 동명이인
     ],
     answer_keys: [{
       id: "exam-1",
@@ -48,7 +48,7 @@ function baseDb(): MockDb {
 }
 
 const VALID = {
-  examId: "exam-1", classId: "class-1", name: "홍길동", pin: "1234",
+  examId: "exam-1", classId: "class-1", number: 3, name: "홍길동", pin: "1234",
   answers: [
     { q: 1, answer: 3 },
     { q: 2, answer: [3, 1] },
@@ -111,7 +111,7 @@ Deno.test("다른 반 전용 시험은 응시 불가 / 자기 반 전용은 가�
   assert(/이 반에서 응시할 수 없는/.test(cross.error), cross.error);
   // 4반 학생(동명이인, 다른 PIN)이 4반 전용 시험 → 성공
   const own: any = await handleSubmit({
-    examId: "exam-2", classId: "class-2", name: "홍길동", pin: "9999",
+    examId: "exam-2", classId: "class-2", number: 3, name: "홍길동", pin: "9999",
     answers: [{ q: 1, answer: 2 }],
   }, admin);
   assert(own.ok, "자기 반 전용 시험은 응시 가능: " + JSON.stringify(own));
@@ -129,7 +129,7 @@ Deno.test("같은 학생 재제출 → 거부 / 다른 반 동명이인은 같�
   assertEquals(db.submissions.length, 1, "재제출이 저장되면 안 됨");
   // 다른 반 동명이인 → 같은 공통 시험 제출 가능 (이름 기반이었으면 막혔을 케이스)
   const twin: any = await handleSubmit({
-    examId: "exam-1", classId: "class-2", name: "홍길동", pin: "9999",
+    examId: "exam-1", classId: "class-2", number: 3, name: "홍길동", pin: "9999",
     answers: [{ q: 1, answer: 3 }],
   }, admin);
   assert(twin.ok, "다른 반 동명이인은 제출 가능해야 함: " + JSON.stringify(twin));

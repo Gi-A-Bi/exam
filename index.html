@@ -788,13 +788,42 @@
         return;
       }
       box.innerHTML = students.map(s => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-bottom:1px solid #eee;font-size:13px">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-bottom:1px solid #eee;font-size:13px;gap:6px;flex-wrap:wrap">
           <span>👧 <strong>${s.number != null ? escapeHtml(String(s.number)) + '번' : '번호없음'}</strong> ${escapeHtml(s.name)} <span style="font-size:11px;color:${s.pin_hash ? '#3b6d11' : '#a32d2d'}">${s.pin_hash ? 'PIN 설정됨' : 'PIN 미설정 (다음 입장 때 새로 설정)'}</span></span>
           <span>
-            <button class="btn-secondary" data-reset-pin="${escapeHtml(s.id)}" type="button" style="font-size:11px;padding:4px 8px">PIN 초기화</button>
+            <button class="btn-secondary" data-edit-number="${escapeHtml(s.id)}" data-cur-number="${s.number != null ? escapeHtml(String(s.number)) : ''}" type="button" style="font-size:11px;padding:4px 8px">번호 수정</button>
+            <button class="btn-secondary" data-reset-pin="${escapeHtml(s.id)}" type="button" style="font-size:11px;padding:4px 8px;margin-left:4px">PIN 초기화</button>
             <button class="btn-danger" data-del-student="${escapeHtml(s.id)}" type="button" style="font-size:11px;padding:4px 8px;margin-left:4px">삭제</button>
           </span>
         </div>`).join('');
+      box.querySelectorAll('[data-edit-number]').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const sid = btn.dataset.editNumber;
+          const cur = btn.dataset.curNumber;
+          const input = prompt('새 번호를 입력하세요. (1~999)', cur);
+          if (input == null) return;                 // 취소
+          const newNum = parseInt(String(input).trim(), 10);
+          if (!(newNum >= 1 && newNum <= 999)) { alert('번호는 1~999 사이 숫자로 입력해주세요.'); return; }
+          if (String(newNum) === cur) return;        // 변동 없음
+          try {
+            // 1) 학생 번호 변경. 같은 반에 이미 있는 번호면 unique 제약(23505)으로 실패.
+            const { error: uErr } = await sb().from('students').update({ number: newNum }).eq('id', sid);
+            if (uErr) {
+              if (uErr.code === '23505' || /duplicate|unique/i.test(uErr.message || '')) {
+                alert('그 번호는 이 반의 다른 학생이 이미 쓰고 있어요. 다른 번호를 입력하거나, 먼저 그 학생 번호를 바꿔주세요.');
+                return;
+              }
+              throw new Error(uErr.message);
+            }
+            // 2) 과거 응시 기록의 번호도 함께 정정(결과/정렬 일관성). RLS로 본인 것만.
+            const { error: sErr } = await sb().from('submissions').update({ number: newNum }).eq('student_id', sid);
+            if (sErr) throw new Error(sErr.message);
+            renderClassStudents(classId, box);
+            if (typeof allSubmissions !== 'undefined' && allSubmissions.length) loadAllSubmissions();  // 결과 탭도 최신화
+          } catch (err) { alert('번호 수정 실패: ' + err.message); }
+        });
+      });
       box.querySelectorAll('[data-reset-pin]').forEach(btn => {
         btn.addEventListener('click', async (e) => {
           e.stopPropagation();

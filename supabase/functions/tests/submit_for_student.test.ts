@@ -172,6 +172,24 @@ Deno.test("submissions insert 실패 → ok:false (유실을 성공으로 위장
   assertEquals(db.submissions.length, 0);
 });
 
+Deno.test("이탈 횟수(awayCount)를 submissions.away_count 에 저장 + 음수/과대값 클램프", async () => {
+  const db = baseDb();
+  await handleSubmit({ ...VALID, awayCount: 3 }, makeAdmin(db));
+  assertEquals(db.submissions[0].away_count, 3);
+
+  const db2 = baseDb();
+  await handleSubmit({ ...VALID, awayCount: -5 }, makeAdmin(db2));
+  assertEquals(db2.submissions[0].away_count, 0, "음수는 0으로");
+
+  const db3 = baseDb();
+  await handleSubmit({ ...VALID, awayCount: 999999 }, makeAdmin(db3));
+  assertEquals(db3.submissions[0].away_count, 100000, "상한 클램프");
+
+  const db4 = baseDb();
+  await handleSubmit({ ...VALID }, makeAdmin(db4));   // 미전송 → 0
+  assertEquals(db4.submissions[0].away_count, 0);
+});
+
 Deno.test("최상위 correct(맞은 개수)/score 는 정상 노출된다", async () => {
   const res: any = await handleSubmit({
     ...VALID, answers: [{ q: 1, answer: 3 }, { q: 2, answer: [1, 3] }, { q: 3, answer: "서울" }],

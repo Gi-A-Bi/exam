@@ -10,6 +10,7 @@ export interface SubmitInput {
   number?: number | string;
   name?: string;
   pin?: string;
+  awayCount?: number | string;
   answers?: Array<{ q: number; answer: unknown }>;
 }
 
@@ -29,7 +30,9 @@ const ALREADY_SUBMITTED_MSG =
   "이미 제출한 시험입니다. 제출한 결과는 수정할 수 없어요. (문의는 선생님께)";
 
 export async function handleSubmit(input: SubmitInput, admin: any) {
-  const { examId, classId, number, name, pin, answers } = input ?? {};
+  const { examId, classId, number, name, pin, awayCount, answers } = input ?? {};
+  // 이탈 횟수(부정행위 억제용) — 신뢰 못 하는 클라이언트 값이므로 0~100000으로 클램프.
+  const away = Math.max(0, Math.min(100000, parseInt(String(awayCount ?? 0), 10) || 0));
 
   // 1. 입력 검증 (+ 익명 경로 하드닝: 이름 길이·답안 개수 상한)
   if (!examId || !classId || number == null || !name || !pin || !Array.isArray(answers))
@@ -74,7 +77,7 @@ export async function handleSubmit(input: SubmitInput, admin: any) {
   //    insert 실패를 삼키면 학생에겐 점수가 보이지만 교사쪽엔 저장 안 되는 유실이 발생 → 반드시 검사.
   const { error: insErr } = await admin.from("submissions").insert({
     teacher_id: cls.teacher_id, exam_id: examId, name: studentName,
-    number: studentNumber,
+    number: studentNumber, away_count: away,
     class_id: classId, student_id: studentId,
     subject: exam.subject, unit: exam.unit,
     count: graded.count, correct: graded.correct, score: graded.score,

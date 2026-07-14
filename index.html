@@ -355,6 +355,8 @@
   </div>
   <div class="card" id="omr-card" style="display:none">
     <p class="section-title">✅ 답안지</p>
+    <div class="msg info" id="omr-honor" style="margin-top:0;margin-bottom:10px">시험 중에는 다른 앱·창으로 이동하지 마세요. 화면을 벗어나면 횟수가 선생님께 기록돼요.</div>
+    <div class="msg error" id="omr-away-warn" style="display:none;margin-top:0;margin-bottom:10px"></div>
     <div class="answer-list" id="omr-grid"></div>
     <button class="btn-primary" id="submit-btn" type="button" style="margin-top:12px">답안 제출 & 채점</button>
     <button class="btn-secondary" id="cancel-btn" type="button" style="margin-top:12px;margin-left:6px">시험 변경</button>
@@ -447,6 +449,7 @@
   });
   $('#stu-logout').addEventListener('click', () => {
     clearStudentState();       // 이어하기 상태 종료 (미제출 임시답안은 남겨둠 — 재입장 시 복원)
+    stopAwayTracking();
     session = {}; showScreen('role-screen');
   });
 
@@ -1309,8 +1312,28 @@
     }
   }
 
+  // ===== 부정행위 억제: 응시 중 화면 이탈 감지 (감지만 가능, 차단은 웹에서 불가) =====
+  // 웹페이지는 창 전환/최소화를 막을 수 없으므로, 벗어난 횟수를 세어 제출에 기록한다.
+  const examAway = { count: 0, isAway: false, active: false };
+  function startAwayTracking() { examAway.count = 0; examAway.isAway = false; examAway.active = true; $('#omr-away-warn').style.display = 'none'; }
+  function stopAwayTracking() { examAway.active = false; }
+  function onExamLeave() {
+    if (!examAway.active || examAway.isAway) return;
+    examAway.isAway = true; examAway.count++;
+  }
+  function onExamReturn() {
+    if (!examAway.active || !examAway.isAway) return;
+    examAway.isAway = false;
+    const w = $('#omr-away-warn');
+    w.textContent = '⚠ 시험 중 화면을 벗어났어요 (' + examAway.count + '회). 이 기록은 선생님께 전달됩니다.';
+    w.style.display = '';
+  }
+  document.addEventListener('visibilitychange', () => { if (document.hidden) onExamLeave(); else onExamReturn(); });
+  window.addEventListener('blur', onExamLeave);
+  window.addEventListener('focus', onExamReturn);
+
   $('#stu-exam-select').addEventListener('change', (e) => {
-    if (!e.target.value) { $('#omr-card').style.display = 'none'; saveStudentState(null); return; }
+    if (!e.target.value) { $('#omr-card').style.display = 'none'; stopAwayTracking(); saveStudentState(null); return; }
     const exam = (window._examsCache || []).find(x => x.id === e.target.value);
     if (!exam) return;
     currentExam = exam;
@@ -1345,11 +1368,13 @@
     saveStudentState(exam.id);  // 새로고침 후에도 이 시험으로 복귀
     $('#omr-card').style.display = '';
     $('#submit-msg').innerHTML = '';
+    startAwayTracking();        // 이 시험 응시 시작 → 이탈 카운트 초기화·시작
   });
 
   $('#cancel-btn').addEventListener('click', () => {
     $('#stu-exam-select').value = '';
     $('#omr-card').style.display = 'none';
+    stopAwayTracking();
     saveStudentState(null);
   });
 
@@ -1422,7 +1447,11 @@
       + '제출 전에 마킹(답안 표시)을 정확히 했는지 꼭 검토해주세요!\n'
       + '한 번 제출하면 답안을 수정하거나 다시 제출할 수 없습니다.\n\n'
       + '이대로 제출할까요?';
-    if (!confirm(warn)) return;
+    // confirm 다이얼로그가 창 blur 를 유발해 이탈 카운트가 늘지 않도록 잠시 추적 정지
+    examAway.active = false;
+    if (!confirm(warn)) { examAway.active = true; examAway.isAway = false; return; }  // 취소 → 계속 응시 → 추적 재개
+    const awayCount = examAway.count;   // 제출할 이탈 횟수 확정
+    stopAwayTracking();
     const btn = $('#submit-btn');
     btn.disabled = true; btn.textContent = '채점 중...';
     try {
@@ -1434,6 +1463,7 @@
           number: session.studentNumber,
           name: session.studentName,
           pin: session.studentPin,
+          awayCount,
           answers
         }
       });
@@ -1446,6 +1476,7 @@
     } catch (e) {
       $('#submit-msg').innerHTML = `<div class="msg error">${escapeHtml(e.message)}</div>`;
       btn.disabled = false; btn.textContent = '답안 제출 & 채점';
+      examAway.active = true; examAway.isAway = false;   // 제출 실패 → 계속 응시 → 추적 재개
     }
   });
 
@@ -1512,7 +1543,7 @@
       // list_submissions → submissions 직접 select. RLS(teacher reads own submissions)로 본인 것만.
       // submitted_at → submittedAt 로 alias 해 기존 렌더링/정렬 코드를 그대로 유지.
       const { data, error } = await sb().from('submissions')
-        .select('id, name, number, subject, unit, count, correct, score, detail, class_id, submittedAt:submitted_at')
+        .select('id, name, number, subject, unit, count, correct, score, detail, class_id, away_count, submittedAt:submitted_at')
         .order('submitted_at', { ascending: false });
       if (error) throw new Error(error.message);
       allSubmissions = data || [];
@@ -1610,6 +1641,7 @@
         const ds = `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
         const rv = (s.detail||[]).filter(x => x.needsReview && x.manualOverride == null).length;
         const rm = rv > 0 ? `<span class="review-flag">⚠ ${rv}</span>` : '';
+        const away = (s.away_count || 0) > 0 ? `<span class="review-flag" style="background:#fcebeb;color:#a32d2d" title="응시 중 화면 이탈 ${s.away_count}회">🚨 ${s.away_count}</span>` : '';
         const clsName = s.class_id ? classNameById(s.class_id) : '';
         const numTag = s.number != null ? `<span style="color:#666;font-weight:600">${escapeHtml(String(s.number))}번</span> ` : '';
         return `<div class="result-row" data-id="${escapeHtml(s.id)}" style="cursor:pointer">
@@ -1618,7 +1650,7 @@
           <div style="font-size:12px;color:#666">${escapeHtml(s.unit)}</div>
           <div><span class="score-badge ${cls}" data-score="${escapeHtml(s.id)}">${s.score}점</span></div>
           <div style="font-size:11px;color:#999">${ds}</div>
-          <div>${rm}</div>
+          <div>${rm}${away}</div>
         </div>`;
       }).join('');
     el.querySelectorAll('[data-id]').forEach(row => {
@@ -1642,6 +1674,7 @@
     let hint = '';
     if (rc > 0) hint = `<div style="font-size:11px;color:#854f0b;margin-bottom:8px;font-weight:600">⚠ ${rc}개 문항이 정답과 유사합니다.</div>`;
     else if (hasShort) hint = '<div style="font-size:11px;color:#666;margin-bottom:8px">주관식은 [⭕/❌]로 수동 정정 가능.</div>';
+    if ((sub.away_count || 0) > 0) hint = `<div style="font-size:11px;color:#a32d2d;margin-bottom:8px;font-weight:600">🚨 응시 중 화면을 벗어난 기록 ${sub.away_count}회 — 부정행위 여부를 확인해보세요.</div>` + hint;
     exp.innerHTML = hint + '<div class="question-detail">' +
       (sub.detail||[]).map((d, idx) => {
         const eff = effectiveCorrect(d);
@@ -1720,10 +1753,10 @@
   $('#export-csv').addEventListener('click', () => {
     const d = getFiltered();
     if (d.length === 0) { alert('내보낼 데이터가 없습니다.'); return; }
-    const header = ['번호','이름','반','과목','단원','문항수','맞은개수','점수','검토필요','제출일시'];
+    const header = ['번호','이름','반','과목','단원','문항수','맞은개수','점수','검토필요','이탈횟수','제출일시'];
     const rows = d.map(s => {
       const r = (s.detail||[]).filter(x => x.needsReview && x.manualOverride == null).length;
-      return [s.number != null ? s.number : '', s.name, s.class_id ? classNameById(s.class_id) : '', s.subject, s.unit, s.count, s.correct, s.score, r > 0 ? 'Y' : '', s.submittedAt];
+      return [s.number != null ? s.number : '', s.name, s.class_id ? classNameById(s.class_id) : '', s.subject, s.unit, s.count, s.correct, s.score, r > 0 ? 'Y' : '', s.away_count || 0, s.submittedAt];
     });
     const csv = '\uFEFF' + [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });

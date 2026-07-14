@@ -2,7 +2,7 @@
 -- OMR 자동 채점 시스템 — 통합 설치 SQL (exam-omr 프로젝트용)
 -- 사용법: Supabase 대시보드 → SQL Editor → 이 파일 전체를 붙여넣고,
 --        맨 아래 '학교 설정' 두 값을 고친 뒤 → Run 한 번.
--- (supabase/migrations 7개를 순서대로 합친 것 + 학교 설정)
+-- (supabase/migrations 8개를 순서대로 합친 것 + 학교 설정)
 -- ============================================================
 
 
@@ -757,6 +757,19 @@ grant execute on function public.student_enter(uuid, int, text, text)   to anon,
 grant execute on function public.student_history(uuid, int, text)        to anon, authenticated;
 revoke execute on function public.student_verify(uuid, int, text)        from public, anon, authenticated;
 grant  execute on function public.student_verify(uuid, int, text)        to service_role;
+
+-- ################################################################
+-- ## 20260714150000_submission_away_count.sql
+-- ################################################################
+-- ============================================================
+-- 부정행위 억제: 응시 중 화면 이탈 횟수 기록 (결정 2026-07-14)
+--  * 웹은 창 전환/최소화를 '차단'할 수 없음 → '감지+기록'만 가능.
+--  * 학생이 시험 중 탭을 벗어나면(visibilitychange/blur) 프론트가 횟수를 세고
+--    제출 시 함께 보냄. 교사 결과 화면에 '이탈 N회'로 표시.
+--  * 기존 제출은 0 (기본값).
+-- ============================================================
+
+alter table public.submissions add column if not exists away_count int not null default 0;
 
 -- ################################################################
 -- ## 학교 설정 — ★ 아래 두 값을 실제 값으로 고친 뒤 실행하세요 ★

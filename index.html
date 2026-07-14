@@ -794,11 +794,36 @@
       box.querySelectorAll('[data-del-student]').forEach(btn => {
         btn.addEventListener('click', async (e) => {
           e.stopPropagation();
-          if (!confirm('이 학생을 명단에서 삭제할까요?\n(제출된 결과 기록은 남습니다. 삭제 후 같은 이름으로 다시 입장하면 새로 등록되어 재제출이 가능해져요)')) return;
+          const sid = btn.dataset.delStudent;
           try {
-            const { error } = await sb().from('students').delete().eq('id', btn.dataset.delStudent);
+            // 이 학생의 응시 결과 건수를 먼저 확인해 삭제 선택지를 안내
+            const { count, error: cErr } = await sb().from('submissions')
+              .select('id', { count: 'exact', head: true }).eq('student_id', sid);
+            if (cErr) throw new Error(cErr.message);
+            const n = count || 0;
+
+            if (!confirm('이 학생을 삭제할까요?')) return;
+
+            let deleteResults = false;
+            if (n > 0) {
+              // confirm=결과까지 삭제 / cancel=명단에서만 삭제(결과 보존)
+              deleteResults = confirm(
+                '이 학생의 응시 결과가 ' + n + '건 있습니다.\n\n' +
+                '[확인] 응시 결과도 함께 삭제합니다. (되돌릴 수 없음)\n' +
+                '[취소] 명단에서만 삭제하고 응시 결과는 남깁니다.'
+              );
+            }
+
+            // 순서 중요: 결과를 먼저 삭제해야 함. 학생을 먼저 지우면 student_id 가
+            // null 로 바뀌어(on delete set null) 어떤 결과가 이 학생 것인지 연결이 끊긴다.
+            if (deleteResults) {
+              const { error: dErr } = await sb().from('submissions').delete().eq('student_id', sid);
+              if (dErr) throw new Error(dErr.message);
+            }
+            const { error } = await sb().from('students').delete().eq('id', sid);
             if (error) throw new Error(error.message);
             renderClassStudents(classId, box);
+            if (deleteResults) loadAllSubmissions();   // 결과 목록·통계·분석 갱신
           } catch (err) { alert('삭제 실패: ' + err.message); }
         });
       });

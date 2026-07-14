@@ -1586,8 +1586,26 @@
         const tb = d.type === 'short' ? `<button class="toggle-btn" data-idx="${idx}" type="button">${eff ? '❌로' : '⭕로'}</button>` : '';
         const sa = d.student == null || d.student === '' ? '-' : escapeHtml(String(d.student));
         return `<span class="q-pill ${cls}">${mm}${rm}${tm}${d.q}번 ${escapeHtml(String(d.correct))} / ${sa} ${tb}</span>`;
-      }).join('') + '</div>';
+      }).join('') + '</div>' +
+      '<div style="margin-top:12px;text-align:right"><button class="btn-danger" data-del-sub type="button">🗑 이 응시 결과 삭제</button></div>';
     row.after(exp);
+    exp.querySelector('[data-del-sub]').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!confirm(`${sub.name} 학생의 [${sub.subject} · ${sub.unit}] 응시 결과를 삭제할까요?\n(이 응시 기록만 삭제됩니다. 되돌릴 수 없어요)`)) return;
+      const btn = e.currentTarget;
+      btn.disabled = true; btn.textContent = '삭제 중...';
+      try {
+        // submissions 개별 삭제. RLS "teacher deletes own submissions" 로 본인 것만 삭제됨.
+        const { error } = await sb().from('submissions').delete().eq('id', sub.id);
+        if (error) throw new Error(error.message);
+        allSubmissions = allSubmissions.filter(x => x.id !== sub.id);
+        exp.remove();
+        updateFilters(); updateReviewBadge(); renderStats(); renderResults();
+      } catch (err) {
+        btn.disabled = false; btn.textContent = '🗑 이 응시 결과 삭제';
+        alert('삭제 실패: ' + err.message);
+      }
+    });
     exp.querySelectorAll('.toggle-btn').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();

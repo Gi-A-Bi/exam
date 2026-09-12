@@ -144,6 +144,13 @@
         <input type="password" id="login-pw" placeholder="비밀번호" autocomplete="current-password" />
       </div>
     </div>
+    <div class="row">
+      <div>
+        <label class="field-label">접속 코드</label>
+        <input type="password" id="login-access" placeholder="관리 선생님에게 받은 접속 코드" autocomplete="off" />
+      </div>
+    </div>
+    <p class="hint-text">학생 개인정보 보호를 위해 선생님 로그인에는 접속 코드가 필요합니다.<br>코드 문의는 <a href="mailto:healthydol@gmail.com">healthydol@gmail.com</a> 으로 해주세요.</p>
     <div style="margin-top:12px">
       <button class="btn-primary" id="login-btn" type="button">로그인</button>
       <button class="btn-secondary" id="login-back" type="button" style="margin-left:6px">뒤로</button>
@@ -377,6 +384,12 @@
 <script>
   window.SUPABASE_URL      = window.SUPABASE_URL      || "https://sirhiuxgoaghzxzbtkca.supabase.co";
   window.SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNpcmhpdXhnb2FnaHp4emJ0a2NhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4NjY3ODIsImV4cCI6MjA5ODQ0Mjc4Mn0.qihjO9AE9msA_bWAmzz4927KOgFq65kVOD8f12-9GVs";
+
+  // ===== 선생님 로그인 접속 코드 =====
+  // 학생 개인정보 보호 목적의 1차 관문. 화면 단계에서만 확인하므로
+  // 실제 차단은 서버(register_teacher Edge Function) 쪽 검증과 함께 가야 한다.
+  const TEACHER_ACCESS_CODE = '20260910';
+  const ACCESS_CODE_CONTACT = 'healthydol@gmail.com';
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
@@ -511,14 +524,17 @@
   $('#login-btn').addEventListener('click', async () => {
     const email = $('#login-email').value.trim();
     const pw = $('#login-pw').value;
+    const accessCode = $('#login-access').value.trim();
     if (!email || !pw) { $('#login-msg').innerHTML = '<div class="msg error">이메일과 비밀번호를 입력해주세요.</div>'; return; }
+    if (!accessCode) { $('#login-msg').innerHTML = `<div class="msg error">접속 코드를 입력해주세요. 코드 문의는 ${ACCESS_CODE_CONTACT} 으로 해주세요.</div>`; return; }
+    if (accessCode !== TEACHER_ACCESS_CODE) { $('#login-msg').innerHTML = `<div class="msg error">접속 코드가 올바르지 않습니다. 코드 문의는 ${ACCESS_CODE_CONTACT} 으로 해주세요.</div>`; return; }
     const btn = $('#login-btn');
     btn.disabled = true; btn.textContent = '로그인 중...';
     try {
       const { data, error } = await sb().auth.signInWithPassword({ email, password: pw });
       if (error) throw new Error(error.message);
       const prof = await fetchOwnTeacherProfile(data.user.id);
-      $('#login-email').value = ''; $('#login-pw').value = '';
+      $('#login-email').value = ''; $('#login-pw').value = ''; $('#login-access').value = '';
       enterTeacherMain(prof.code, prof.name, data.user.id, prof.school);
     } catch (e) {
       $('#login-msg').innerHTML = `<div class="msg error">${escapeHtml(e.message)}</div>`;
@@ -526,7 +542,7 @@
       btn.disabled = false; btn.textContent = '로그인';
     }
   });
-  ['#login-email','#login-pw'].forEach(s => $(s).addEventListener('keypress', e => { if (e.key === 'Enter') $('#login-btn').click(); }));
+  ['#login-email','#login-pw','#login-access'].forEach(s => $(s).addEventListener('keypress', e => { if (e.key === 'Enter') $('#login-btn').click(); }));
 
   // ===== 선생님 가입 (register_teacher Edge Function → 이어서 로그인) =====
   $('#reg-btn').addEventListener('click', async () => {

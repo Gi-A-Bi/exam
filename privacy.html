@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>개인정보처리방침 — OMR 자동 채점 시스템</title>
+<style>
+:root{color-scheme:light dark}
+*{box-sizing:border-box}
+body{margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  line-height:1.75;color:#1f2328;background:#fff;-webkit-text-size-adjust:100%}
+.wrap{max-width:780px;margin:0 auto;padding:40px 20px 80px}
+h1{font-size:1.7rem;line-height:1.35;margin:0 0 6px;letter-spacing:-.02em}
+.sub{color:#59636e;font-size:.95rem;margin:0 0 28px}
+h2{font-size:1.12rem;margin:38px 0 10px;padding-top:18px;border-top:1px solid #e4e8ec;letter-spacing:-.01em}
+p,li{font-size:.97rem}
+ul,ol{padding-left:1.35em}
+li{margin:.28em 0}
+code{background:#f2f4f6;padding:.1em .38em;border-radius:4px;font-size:.87em;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:.92rem;display:block;overflow-x:auto}
+th,td{border:1px solid #d8dee4;padding:9px 11px;text-align:left;vertical-align:top}
+th{background:#f6f8fa;font-weight:600;white-space:nowrap}
+.todo{display:inline-block;background:#fff3cd;border:1px solid #e0b93c;color:#6b4e00;
+  padding:.1em .45em;border-radius:4px;font-size:.88em;font-weight:600}
+.warn{display:inline-block;background:#ffe3e3;border:1px solid #d94a4a;color:#8a1f1f;
+  padding:.1em .45em;border-radius:4px;font-size:.88em;font-weight:600}
+.warn-inline{background:#fff5f5;border-left:3px solid #d94a4a;padding:10px 14px;margin:14px 0;border-radius:0 6px 6px 0}
+.highlight{background:#e8f5e9;border-left:3px solid #2e7d32;padding:10px 14px;margin:14px 0;border-radius:0 6px 6px 0}
+.note{color:#59636e;font-size:.88rem;margin-top:8px}
+.draft{background:#fff8e1;border:1px solid #e0b93c;border-radius:8px;padding:14px 18px;margin:0 0 26px}
+.draft strong{display:block;margin-bottom:6px}
+.draft p{margin:.4em 0;font-size:.92rem}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid #e4e8ec;color:#59636e;font-size:.88rem}
+a{color:#0969da}
+@media (prefers-color-scheme:dark){
+  body{background:#0d1117;color:#e6edf3}
+  h2{border-top-color:#30363d}
+  .sub,.note,footer{color:#9198a1}
+  code{background:#21262d}
+  th,td{border-color:#30363d}
+  th{background:#161b22}
+  .todo{background:#3d2f00;border-color:#9e7700;color:#f0d58c}
+  .warn{background:#3d1d1d;border-color:#c04a4a;color:#ffb3b3}
+  .warn-inline{background:#2b1414}
+  .highlight{background:#12261a}
+  .draft{background:#2b2413;border-color:#7a6320}
+  footer{border-top-color:#30363d}
+}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>개인정보처리방침</h1>
+    <p class="sub">OMR 자동 채점 시스템 · https://gi-a-bi.github.io/exam/</p>
+    <p>OMR 자동 채점 시스템은 교사가 정답지를 등록하면 학생 답안을 자동 채점하고 문항을 분석하는 웹앱입니다. 운영자는 「개인정보 보호법」에 따라 정보주체의 개인정보를 보호하고
+    이와 관련한 고충을 신속하게 처리할 수 있도록 다음과 같이 개인정보처리방침을 수립·공개합니다.</p>
+
+    <h2>제1조 (개인정보의 처리 목적)</h2>
+    <ol>
+    <li><strong>교사 계정 관리</strong> — 로그인 및 본인이 만든 정답지·채점 결과 식별</li>
+    <li><strong>채점 및 결과 관리</strong> — 학생 답안 채점, 점수 산출, 문항별 정답률 분석 제공</li>
+    </ol>
+
+    <h2>제2조 (처리하는 개인정보의 항목)</h2>
+    <table>
+    <thead><tr><th>구분</th><th>수집 항목</th><th>수집 방법</th></tr></thead>
+    <tbody>
+    <tr><td>교사</td><td>이메일 주소, 비밀번호(암호화 저장), 이름, 교사 코드</td><td>회원 가입 시 직접 입력</td></tr>
+    <tr><td>학생</td><td>이름(또는 학번·별명)</td><td>응시 또는 교사 입력 시</td></tr>
+    <tr><td>학습 평가 정보</td><td>과목, 단원, 총점, 맞은 개수, 문항별 제출 답안과 정답 여부</td><td>채점 시 자동 생성</td></tr>
+    </tbody>
+    </table>
+    <p class="warn-inline">이 서비스는 <strong>학생의 학업 성취도(성적) 정보</strong>를 처리합니다.
+    성적은 학생에게 민감한 정보이므로 특히 주의하여 관리합니다.</p>
+    <p class="note">근거: <code>schema.sql</code>의 <code>teachers</code>·<code>submissions</code> 테이블.</p>
+
+    <h2>제3조 (개인정보의 최소 수집과 보유·이용 기간)</h2>
+    <p>채점에 필요한 최소한의 항목만 수집하며, 학생에 대해서는 <strong>식별용 이름과 평가 결과만</strong>
+    처리합니다. 생년월일·연락처·주소 등은 수집하지 않습니다.</p>
+    <p>학생 식별자는 실명 대신 학번이나 별명으로 대체하여 운영할 수 있습니다.</p>
+    <p>보유·이용 기간: <strong>해당 학년도 종료 시까지</strong> 보유하며, 학년도가 끝나면 파기합니다.
+    교사가 학급이나 학생을 삭제하는 경우에는 그 시점에 즉시 파기합니다.</p>
+
+    <h2>제4조 (만 14세 미만 아동의 개인정보 보호)</h2>
+    <p>이 서비스의 가입·로그인 주체는 <strong>교사</strong>입니다.</p>
+    
+    <p>이 서비스는 학교의 학급 운영을 지원하는 도구입니다. 학생의 개인정보는 학교가 학년 초에
+    법정대리인(보호자)으로부터 받은 <strong>개인정보 수집·이용 동의</strong>의 범위에서 처리하며,
+    그 범위를 넘어서는 처리가 필요한 경우에는 이 서비스에 대한 <strong>별도의 동의</strong>를
+    받은 뒤 처리합니다.</p>
+    <p>학생의 개인정보에 대한 열람·정정·삭제·처리정지 요구는 법정대리인이 제8조의 개인정보
+    보호책임자(담당 교사)에게 요청할 수 있습니다.</p>
+
+    <h2>제5조 (개인정보의 파기)</h2>
+    <p>교사가 정답지를 삭제하면 그에 연결된 채점 결과가 함께 삭제됩니다
+    (<code>ON DELETE CASCADE</code>). 교사 계정을 삭제하면 해당 교사의 모든 정답지와 채점 결과가 삭제됩니다.</p>
+    <p>보유기간이 지난 개인정보는 <strong>해당 학년도 종료 시</strong> 파기합니다.
+    전자적 파일 형태로 저장된 정보는 복구할 수 없는 방법으로 영구 삭제합니다.</p>
+
+    <h2>제6조 (개인정보의 안전성 확보 조치)</h2>
+    <ul>
+    <li><strong>교사별 데이터 격리</strong> — 데이터베이스에 Row Level Security(RLS)를 적용해,
+    교사는 자신의 정답지와 채점 결과만 조회할 수 있습니다. 애플리케이션 코드가 아닌
+    데이터베이스 차원에서 강제됩니다.</li>
+    <li><strong>정답 보호</strong> — 학생은 정답지 테이블에 직접 접근할 수 없으며,
+    채점은 서버 함수를 통해서만 수행됩니다.</li>
+    <li>전송 구간 암호화 — 모든 통신에 HTTPS 적용</li>
+    <li>비밀번호는 인증 서비스가 암호화하여 저장하며 운영자도 원문을 알 수 없습니다</li>
+    </ul>
+    <p class="note">근거: <code>schema.sql</code>의 <code>enable row level security</code> 및 교사별 접근 정책.</p>
+
+    <h2>제7조 (정보주체의 권리·의무 및 행사 방법)</h2>
+    <p>정보주체(교사, 학생 및 그 법정대리인)는 언제든지 다음 권리를 행사할 수 있습니다.</p>
+    <ol>
+    <li>개인정보 열람 요구</li>
+    <li>오류가 있을 경우 정정 요구</li>
+    <li>삭제 요구</li>
+    <li>처리정지 요구</li>
+    </ol>
+    <p>권리 행사는 제8조의 개인정보 보호책임자(담당 교사)에게 요청할 수 있으며, 운영자는 지체 없이
+    조치합니다. 학생 본인 또는 법정대리인이 요구하는 경우에도 같습니다.</p>
+
+    <h2>제8조 (개인정보 보호책임자)</h2>
+    <p>운영자는 개인정보 처리에 관한 업무를 총괄해서 책임지고, 정보주체의 문의·불만 처리와
+    피해 구제를 위하여 아래와 같이 개인정보 보호책임자를 지정하고 있습니다.</p>
+    <ul>
+    <li>개인정보 보호책임자: 담당 교사</li>
+    </ul>
+    <p>정보주체는 개인정보 처리에 관한 문의, 열람·정정·삭제·처리정지 요구, 불만 처리, 피해 구제에
+    관한 사항을 담당 교사에게 요청할 수 있으며, 운영자는 지체 없이 답변하고 처리합니다.</p>
+    <p>개인정보 침해로 인한 신고나 상담이 필요한 경우 아래 기관에 문의할 수 있습니다.</p>
+    <ul>
+    <li>개인정보침해신고센터 — 국번없이 118 (privacy.kisa.or.kr)</li>
+    <li>개인정보 분쟁조정위원회 — 1833-6972 (kopico.go.kr)</li>
+    </ul>
+
+    <h2>제9조 (개인정보의 제3자 제공)</h2>
+    <p>운영자는 정보주체의 개인정보를 제3자에게 제공하지 않습니다.
+    학생의 성적 정보는 해당 학급 담당 교사 외에는 조회할 수 없습니다.
+    다만 법령에 특별한 규정이 있는 경우에는 예외로 합니다.</p>
+
+    <h2>제10조 (개인정보 처리의 위탁)</h2>
+    <table>
+    <thead><tr><th>수탁자</th><th>위탁 업무</th></tr></thead>
+    <tbody>
+    <tr><td>Supabase, Inc.</td><td>데이터베이스 및 회원 인증 서비스 운영</td></tr>
+    <tr><td>GitHub, Inc.</td><td>웹사이트 호스팅(GitHub Pages)</td></tr>
+    </tbody>
+    </table>
+
+    <h2>제11조 (개인정보의 국외 이전)</h2>
+    <p>위 수탁자는 모두 국외 사업자이며, 서비스 제공을 위해 개인정보가 국외에서 처리됩니다.</p>
+    <table>
+    <thead><tr><th>이전받는 자</th><th>이전 국가</th><th>이전 항목</th><th>이용 목적 및 보유 기간</th></tr></thead>
+    <tbody>
+    <tr><td>Supabase, Inc.</td><td>싱가포르<br>(AWS ap-southeast-1)</td><td>제2조의 수집 항목</td><td>데이터베이스·인증 운영 — 제3조의 보유 기간</td></tr>
+    <tr><td>GitHub, Inc.</td><td>미국</td><td>접속 시 IP 주소</td><td>웹사이트 호스팅 — 위탁 업무 수행 기간</td></tr>
+    </tbody>
+    </table>
+    <p>이전 시기와 방법: 서비스 이용 시점에 정보통신망을 통해 전송합니다.</p>
+
+    <h2>제12조 (개인정보처리방침의 변경)</h2>
+    <p>이 개인정보처리방침은 2026년 9월 14일부터 적용됩니다. 법령·서비스 변경에 따라 내용이 추가·삭제·수정될
+    때에는 변경 사항을 시행 7일 전부터 이 페이지에 공지합니다.</p>
+
+    <footer>
+      <p>시행일: 2026년 9월 14일</p>
+    </footer>
+  </div>
+</body>
+</html>

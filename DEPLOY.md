@@ -93,7 +93,16 @@ window.SUPABASE_ANON_KEY = "eyJ...(anon public 키)";
 
 ## 이미 운영 중인데 기능이 추가됐을 때
 
-저장소를 최신으로 받은 뒤 **마이그레이션만 다시 적용**하면 됩니다. 이미 적용된 것은 건너뜁니다.
+**`setup_all.sql` 로 설치하셨다면** (SQL Editor 붙여넣기 방식) — Docker·CLI·git 모두 필요 없습니다.
+Supabase 대시보드 → **SQL Editor** → `supabase/setup_update_<날짜>.sql` 전체를 붙여넣고 **Run** 한 번.
+전부 `create or replace` 라서 여러 번 실행해도 안전합니다.
+
+> ⚠ `npx supabase db push` 는 CLI 로 설치한 프로젝트에서만 쓰세요.
+> SQL Editor 로 설치한 프로젝트는 마이그레이션 기록이 비어 있어서, `db push` 가
+> **처음부터 전부 다시 적용하려다 실패**합니다. 또 `link` 하지 않으면 로컬 Docker 를
+> 보기 때문에 `connect ECONNREFUSED 127.0.0.1:54322` 가 납니다.
+
+**CLI 로 설치하셨다면:**
 
 ```bash
 git pull
@@ -106,6 +115,8 @@ npx supabase db push
 |---|---|
 | 정답지 수정 → 기존 응시 재채점 | `npx supabase db push` (마이그레이션 `20261118030000_answer_key_regrade.sql`) |
 | 학생 명단 선등록 + 갈라진 학생 합치기 | `npx supabase db push` (마이그레이션 `20261118060000_roster_first_entry.sql`) |
+
+위 두 가지는 `supabase/setup_update_20261118.sql` 하나로 합쳐 두었습니다 (SQL Editor 붙여넣기용).
 
 > Edge Function 을 고친 게 아니라면 `functions deploy` 는 다시 할 필요가 없습니다.
 > 프론트엔드(`index.html`)는 GitHub Pages 가 자동 배포하므로 따로 할 일이 없습니다.

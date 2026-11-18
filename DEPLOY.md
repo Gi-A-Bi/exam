@@ -27,7 +27,7 @@ git clone -b claude/grading-refactor-golden-master-enp7dy https://github.com/Gi-
 cd exam
 npx supabase login                 # 브라우저가 열리며 로그인
 npx supabase link --project-ref <프로젝트ref>   # URL 의 abcdefgh 부분
-npx supabase db push               # 마이그레이션 5개 적용 (테이블/RLS/함수/트리거)
+npx supabase db push               # 마이그레이션 전체 적용 (테이블/RLS/함수/트리거)
 npx supabase functions deploy register_teacher
 npx supabase functions deploy submit_for_student
 ```
@@ -88,3 +88,23 @@ window.SUPABASE_ANON_KEY = "eyJ...(anon public 키)";
 | "반 목록을 불러오지 못했어요" | `db push` 누락 또는 URL/키 오타 → 4단계 값 재확인 |
 | 학교 이름이 안 나옴 | 3단계 SQL 미실행 |
 | 학생이 PIN 분실 | 교사 → 반 관리 → 학생 명단 → [PIN 초기화] |
+
+---
+
+## 이미 운영 중인데 기능이 추가됐을 때
+
+저장소를 최신으로 받은 뒤 **마이그레이션만 다시 적용**하면 됩니다. 이미 적용된 것은 건너뜁니다.
+
+```bash
+git pull
+npx supabase db push
+```
+
+기능별로 필요한 작업:
+
+| 기능 | 필요한 것 |
+|---|---|
+| 정답지 수정 → 기존 응시 재채점 | `npx supabase db push` (마이그레이션 `20261118030000_answer_key_regrade.sql`) |
+
+> Edge Function 을 고친 게 아니라면 `functions deploy` 는 다시 할 필요가 없습니다.
+> 프론트엔드(`index.html`)는 GitHub Pages 가 자동 배포하므로 따로 할 일이 없습니다.

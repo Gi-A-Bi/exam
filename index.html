@@ -269,6 +269,30 @@
   .filter-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px; background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--r-lg); margin-bottom: 12px; box-shadow: var(--shadow-sm); }
   .filter-bar select { flex: 1 1 130px; min-width: 110px; width: auto; padding: 8px 10px; font-size: 13px; }
   .filter-bar .spacer { flex: 1 1 0; min-width: 0; }
+  /* 반 관리: 학생 명단 등록 · 합치기 */
+  .roster-add { background: var(--surface-2); border: 1px solid var(--hairline-soft); border-radius: var(--r-md); padding: 12px; margin-bottom: 12px; }
+  .roster-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .roster-row .rs-num { width: 90px; flex: 0 0 90px; }
+  .roster-row .rs-name { flex: 1 1 140px; min-width: 120px; width: auto; }
+  textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--hairline); border-radius: var(--r-md); font-size: 13px; background: var(--surface); color: var(--ink); font-family: inherit; line-height: 1.6; resize: vertical; }
+  textarea:focus { outline: none; border-color: var(--ink); box-shadow: 0 0 0 3px var(--focus-ring); }
+  .rs-bulk { margin-top: 10px; }
+  .student-row { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid var(--hairline-soft); font-size: 13px; gap: 6px; flex-wrap: wrap; }
+  .student-row:last-child { border-bottom: none; }
+  .student-meta { font-size: 11px; color: var(--ink-muted); margin-left: 4px; font-variant-numeric: tabular-nums; }
+  .pin-set { font-size: 11px; color: var(--good-ink); margin-left: 4px; }
+  .pin-unset { font-size: 11px; color: var(--critical-ink); margin-left: 4px; }
+  .dupe-wrap { background: var(--warning-bg); border: 1px solid var(--alert-border); border-radius: var(--r-md); padding: 12px; margin-bottom: 12px; }
+  .dupe-head { font-size: 13px; font-weight: 700; color: var(--warning-ink); margin-bottom: 6px; }
+  .dupe-group { padding: 8px 0; border-top: 1px solid var(--alert-border); }
+  .dupe-name { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .dupe-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .dupe-chip { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--r-sm); padding: 7px 11px; font-family: inherit; font-size: 12px; color: var(--ink); cursor: pointer; transition: border-color .15s, background .15s; }
+  .dupe-chip:hover:not(:disabled) { border-color: var(--warning-ink); background: var(--surface-2); }
+  .dupe-chip:disabled { opacity: .5; cursor: progress; }
+  .dupe-chip span { font-size: 11px; color: var(--ink-muted); }
+  .dupe-chip .dupe-cta { color: var(--info-ink); font-weight: 600; }
+
   .filter-note { font-size: 11px; color: var(--ink-muted); flex: 1 1 100%; margin: 0; line-height: 1.4; }
   .toolbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .toolbar-label { font-size: 12px; color: var(--ink-2); }
@@ -393,6 +417,7 @@
   .msg.info { background: var(--info-bg); color: var(--info-ink); }
   select, input[type="text"], input[type="number"], input[type="password"] { width: 100%; padding: 10px 12px; border: 1px solid var(--hairline); border-radius: var(--r-md); font-size: 14px; background: var(--surface); color: var(--ink); font-family: inherit; }
   select:focus, input:focus { outline: none; border-color: var(--ink); box-shadow: 0 0 0 3px var(--focus-ring); }
+  input:disabled, select:disabled { background: var(--surface-3); color: var(--ink-muted); cursor: not-allowed; }
   .hint-text { font-size: 12px; color: var(--ink-muted); margin-top: 6px; line-height: 1.5; }
   .header-info { background: var(--info-bg); color: var(--info-ink); padding: 10px 14px; border-radius: var(--r-md); margin-bottom: 12px; font-size: 13px; }
 
@@ -531,7 +556,7 @@
 <div id="student-login" style="display:none">
   <div class="card">
     <p class="section-title">✏️ 학생 응시</p>
-    <p class="hint-text" style="margin-bottom:12px">선생님이 알려주신 코드를 입력하고 반을 선택하세요.</p>
+    <p class="hint-text" style="margin-bottom:12px">선생님이 알려주신 <strong>코드·반·번호</strong>로 입장해요. 번호가 안 맞으면 입장되지 않으니 선생님께 확인하세요.</p>
     <div class="row">
       <div>
         <label class="field-label">선생님 코드</label>
@@ -581,7 +606,8 @@
 
   <div class="panel active" id="panel-teacher">
     <div class="card">
-      <p class="section-title">➕ 새 정답지 등록</p>
+      <p class="section-title" id="exam-form-title">➕ 새 정답지 등록</p>
+      <div id="exam-form-notice"></div>
       <div class="row">
         <div><label class="field-label">과목</label><input type="text" id="new-subject" placeholder="예: 수학" /></div>
         <div><label class="field-label">단원</label><input type="text" id="new-unit" placeholder="예: 3단원 도형" /></div>
@@ -604,7 +630,7 @@
   <div class="panel" id="panel-classes">
     <div class="card">
       <p class="section-title">➕ 새 반 만들기</p>
-      <p class="hint-text" style="margin-bottom:10px">학생이 응시하려면 반이 최소 1개 필요해요. 예: <code>2026 3학년 2반</code>, <code>1학기 과학반</code> — 연도별로 반을 새로 만들면 기록이 누적 관리돼요.</p>
+      <p class="hint-text" style="margin-bottom:10px">학생이 응시하려면 반이 최소 1개 필요해요. 예: <code>2026 3학년 2반</code>, <code>1학기 과학반</code> — 연도별로 반을 새로 만들면 기록이 누적 관리돼요. 반을 만든 뒤 <strong>아래 목록에서 반을 눌러 학생 명단을 등록</strong>하세요.</p>
       <div class="row">
         <div><label class="field-label">반 이름</label><input type="text" id="new-class-name" placeholder="예: 2026 3학년 2반" /></div>
         <div style="flex:0 0 auto;align-self:flex-end"><button class="btn-primary" id="add-class-btn" type="button">반 추가</button></div>
@@ -613,7 +639,7 @@
     </div>
     <div class="card">
       <p class="section-title">🏫 내 반 목록</p>
-      <p class="hint-text" style="margin-bottom:10px">반 이름을 누르면 학생 명단이 열려요. 학생이 PIN을 잊었으면 <strong>[PIN 초기화]</strong> — 다음 입장 때 새 PIN을 스스로 설정해요.</p>
+      <p class="hint-text" style="margin-bottom:10px">반 이름을 누르면 학생 명단이 열려요. <strong>먼저 명단(번호·이름)을 등록</strong>한 뒤 학생에게 코드와 번호를 알려주세요. 등록된 번호로만 입장할 수 있어요. PIN을 잊었으면 <strong>[PIN 초기화]</strong> — 다음 입장 때 새 PIN을 스스로 정합니다.</p>
       <div id="classes-list"><div class="loading">불러오는 중...</div></div>
     </div>
   </div>
@@ -1115,28 +1141,211 @@
     });
   }
 
+  // 마이그레이션(20261118060000_roster_first_entry.sql) 미적용 DB 대비
+  function describeMergeError(msg) {
+    const m = String(msg || '');
+    if (/merge_students/i.test(m) || /PGRST202/i.test(m) || /Could not find the function/i.test(m)) {
+      return '학생 합치기 기능이 아직 데이터베이스에 설치되지 않았어요. 터미널에서 `npx supabase db push` 를 한 번 실행한 뒤 다시 시도해 주세요.';
+    }
+    return m;
+  }
+
+  // 이름 비교 정규화 — DB의 public.normalize_name 과 같은 규칙(공백 제거 + 소문자)
+  function normName(n) { return String(n == null ? '' : n).replace(/\s+/g, '').toLowerCase(); }
+
+  // "3 김철수" / "3,김철수" / "3\t김철수" 한 줄을 {number, name} 으로.
+  // 번호가 앞에 없으면 null 을 돌려 호출부가 줄 번호와 함께 알려준다.
+  function parseRosterLine(line) {
+    const t = String(line || '').trim();
+    if (!t) return null;
+    const m = t.match(/^(\d{1,3})\s*[.,\t|]?\s*(.+)$/);
+    if (!m) return null;
+    const number = parseInt(m[1], 10);
+    const name = m[2].trim();
+    if (!(number >= 1 && number <= 999) || !name || name.length > 50) return null;
+    return { number, name };
+  }
+
   async function renderClassStudents(classId, box) {
     box.innerHTML = '<div class="loading">학생 명단 불러오는 중...</div>';
     try {
       // RLS 로 본인 학생만. pin_hash 값 자체는 해시라 노출돼도 원문 PIN 은 알 수 없음.
-      const { data, error } = await sb().from('students')
-        .select('id, name, number, pin_hash, createdAt:created_at').eq('class_id', classId)
-        .order('number', { ascending: true, nullsFirst: false });
-      if (error) throw new Error(error.message);
-      const students = data || [];
-      if (students.length === 0) {
-        box.innerHTML = '<div class="empty" style="padding:8px">아직 입장한 학생이 없어요. (학생이 처음 입장할 때 자동 등록돼요)</div>';
-        return;
+      const [stRes, subRes] = await Promise.all([
+        sb().from('students')
+          .select('id, name, number, pin_hash, createdAt:created_at').eq('class_id', classId)
+          .order('number', { ascending: true, nullsFirst: false }),
+        sb().from('submissions').select('id, student_id, number').eq('class_id', classId)
+      ]);
+      if (stRes.error) throw new Error(stRes.error.message);
+      if (subRes.error) throw new Error(subRes.error.message);
+      const students = stRes.data || [];
+      const subs = subRes.data || [];
+
+      // 응시 수 집계: 학생 연결이 있으면 그걸로, 없으면 번호로 (옛 기록)
+      const byStudent = {}, byNumber = {};
+      subs.forEach(s => {
+        if (s.student_id) byStudent[s.student_id] = (byStudent[s.student_id] || 0) + 1;
+        else if (s.number != null) byNumber[s.number] = (byNumber[s.number] || 0) + 1;
+      });
+      const countOf = st => (byStudent[st.id] || 0) + (st.number != null ? (byNumber[st.number] || 0) : 0);
+
+      // 같은 이름이 여러 번호로 등록된 묶음 = 번호를 다르게 입력해 갈라졌을 가능성
+      const groups = {};
+      students.forEach(st => { (groups[normName(st.name)] = groups[normName(st.name)] || []).push(st); });
+      const dupes = Object.keys(groups).map(k => groups[k]).filter(g => g.length > 1);
+
+      const addForm = `
+        <div class="roster-add">
+          <div class="roster-row">
+            <input type="number" class="rs-num" placeholder="번호" min="1" max="999" inputmode="numeric" aria-label="번호" />
+            <input type="text" class="rs-name" placeholder="이름" aria-label="이름" />
+            <button class="btn-primary rs-add" type="button">학생 추가</button>
+            <button class="btn-secondary rs-bulk-toggle" type="button">명단 한번에 붙여넣기</button>
+          </div>
+          <div class="rs-bulk" style="display:none">
+            <textarea class="rs-bulk-text" rows="6" placeholder="한 줄에 한 명씩 — 번호 다음에 이름&#10;1 김철수&#10;2 이영희&#10;3, 박민수"></textarea>
+            <div style="margin-top:8px">
+              <button class="btn-primary rs-bulk-save" type="button">명단 등록</button>
+              <span class="hint-text" style="margin-left:8px">엑셀에서 두 칸(번호·이름)을 복사해 붙여넣어도 됩니다.</span>
+            </div>
+          </div>
+          <div class="rs-msg"></div>
+        </div>`;
+
+      const dupeBlock = dupes.length === 0 ? '' : `
+        <div class="dupe-wrap">
+          <div class="dupe-head">⚠ 같은 이름이 여러 번호로 등록돼 있어요</div>
+          <div class="hint-text" style="margin:0 0 10px">
+            학생이 입장할 때 번호를 다르게 입력하면 다른 학생으로 등록됩니다.
+            같은 학생이라면 <strong>남길 번호</strong>를 눌러 하나로 합치세요. 응시 기록도 함께 옮겨집니다.
+            동명이인이라면 그대로 두세요.
+          </div>
+          ${dupes.map(g => `
+            <div class="dupe-group">
+              <div class="dupe-name">👧 ${escapeHtml(g[0].name)}</div>
+              <div class="dupe-chips">
+                ${g.map(st => `
+                  <button class="dupe-chip" type="button" data-merge-keep="${escapeHtml(st.id)}"
+                          data-group="${escapeHtml(g.map(x => x.id).join(','))}">
+                    <strong>${st.number != null ? escapeHtml(String(st.number)) + '번' : '번호없음'}</strong>
+                    <span>응시 ${countOf(st)}건</span>
+                    <span class="dupe-cta">이 번호로 합치기</span>
+                  </button>`).join('')}
+              </div>
+            </div>`).join('')}
+        </div>`;
+
+      const listHtml = students.length === 0
+        ? `<div class="empty" style="padding:10px">아직 등록된 학생이 없어요. 위에서 번호와 이름을 등록해 주세요.<br><span class="hint-text">등록된 번호로만 학생이 입장할 수 있습니다.</span></div>`
+        : students.map(st => `
+            <div class="student-row">
+              <span>👧 <strong>${st.number != null ? escapeHtml(String(st.number)) + '번' : '번호없음'}</strong>
+                ${escapeHtml(st.name)}
+                <span class="student-meta">응시 ${countOf(st)}건</span>
+                <span class="${st.pin_hash ? 'pin-set' : 'pin-unset'}">${st.pin_hash ? 'PIN 설정됨' : 'PIN 미설정 (첫 입장 때 학생이 정함)'}</span>
+              </span>
+              <span>
+                <button class="btn-secondary" data-edit-number="${escapeHtml(st.id)}" data-cur-number="${st.number != null ? escapeHtml(String(st.number)) : ''}" type="button" style="font-size:11px;padding:4px 8px">번호 수정</button>
+                <button class="btn-secondary" data-reset-pin="${escapeHtml(st.id)}" type="button" style="font-size:11px;padding:4px 8px;margin-left:4px">PIN 초기화</button>
+                <button class="btn-danger" data-del-student="${escapeHtml(st.id)}" type="button" style="font-size:11px;padding:4px 8px;margin-left:4px">삭제</button>
+              </span>
+            </div>`).join('');
+
+      box.innerHTML = addForm + dupeBlock + listHtml;
+
+      const msgEl = box.querySelector('.rs-msg');
+      const showMsg = (cls, html) => { msgEl.innerHTML = `<div class="msg ${cls}" style="margin-top:10px">${html}</div>`; };
+
+      // --- 학생 등록 (단건) ---
+      async function addStudents(rows) {
+        const taken = {};
+        students.forEach(st => { if (st.number != null) taken[st.number] = st.name; });
+        const dup = rows.filter(r => taken[r.number] != null);
+        if (dup.length) {
+          showMsg('error', `이미 쓰고 있는 번호예요: ${dup.map(r => `${r.number}번(${escapeHtml(taken[r.number])})`).join(', ')}`);
+          return false;
+        }
+        const seen = {};
+        for (const r of rows) {
+          if (seen[r.number]) { showMsg('error', `붙여넣은 명단 안에 ${r.number}번이 두 번 있어요.`); return false; }
+          seen[r.number] = true;
+        }
+        const { error } = await sb().from('students').insert(
+          rows.map(r => ({ class_id: classId, teacher_id: session.teacherId, name: r.name, number: r.number }))
+        );
+        if (error) throw new Error(error.message);
+        return true;
       }
-      box.innerHTML = students.map(s => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-bottom:1px solid #eee;font-size:13px;gap:6px;flex-wrap:wrap">
-          <span>👧 <strong>${s.number != null ? escapeHtml(String(s.number)) + '번' : '번호없음'}</strong> ${escapeHtml(s.name)} <span style="font-size:11px;color:${s.pin_hash ? '#3b6d11' : '#a32d2d'}">${s.pin_hash ? 'PIN 설정됨' : 'PIN 미설정 (다음 입장 때 새로 설정)'}</span></span>
-          <span>
-            <button class="btn-secondary" data-edit-number="${escapeHtml(s.id)}" data-cur-number="${s.number != null ? escapeHtml(String(s.number)) : ''}" type="button" style="font-size:11px;padding:4px 8px">번호 수정</button>
-            <button class="btn-secondary" data-reset-pin="${escapeHtml(s.id)}" type="button" style="font-size:11px;padding:4px 8px;margin-left:4px">PIN 초기화</button>
-            <button class="btn-danger" data-del-student="${escapeHtml(s.id)}" type="button" style="font-size:11px;padding:4px 8px;margin-left:4px">삭제</button>
-          </span>
-        </div>`).join('');
+
+      box.querySelector('.rs-add').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const numEl = box.querySelector('.rs-num'), nameEl = box.querySelector('.rs-name');
+        const number = parseInt(numEl.value, 10);
+        const name = nameEl.value.trim();
+        if (!(number >= 1 && number <= 999)) { showMsg('error', '번호는 1~999 사이 숫자로 입력해주세요.'); return; }
+        if (!name) { showMsg('error', '이름을 입력해주세요.'); return; }
+        try {
+          if (await addStudents([{ number, name }])) renderClassStudents(classId, box);
+        } catch (err) { showMsg('error', escapeHtml(err.message)); }
+      });
+
+      // --- 학생 등록 (명단 일괄) ---
+      box.querySelector('.rs-bulk-toggle').addEventListener('click', (e) => {
+        e.stopPropagation();
+        const w = box.querySelector('.rs-bulk');
+        w.style.display = w.style.display === 'none' ? '' : 'none';
+      });
+      box.querySelector('.rs-bulk-save').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const lines = box.querySelector('.rs-bulk-text').value.split('\n');
+        const rows = [], bad = [];
+        lines.forEach((l, i) => {
+          if (!String(l).trim()) return;
+          const r = parseRosterLine(l);
+          if (r) rows.push(r); else bad.push(i + 1);
+        });
+        if (bad.length) { showMsg('error', `${bad.join(', ')}번째 줄을 읽지 못했어요. "번호 이름" 형식인지 확인해 주세요.`); return; }
+        if (rows.length === 0) { showMsg('error', '등록할 명단이 비어 있어요.'); return; }
+        if (!confirm(`${rows.length}명을 등록할까요?\n\n` + rows.slice(0, 5).map(r => `${r.number}번 ${r.name}`).join('\n') + (rows.length > 5 ? `\n… 외 ${rows.length - 5}명` : ''))) return;
+        try {
+          if (await addStudents(rows)) renderClassStudents(classId, box);
+        } catch (err) { showMsg('error', escapeHtml(err.message)); }
+      });
+
+      // --- 갈라진 학생 합치기 ---
+      box.querySelectorAll('[data-merge-keep]').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const keepId = btn.dataset.mergeKeep;
+          const ids = btn.dataset.group.split(',').filter(id => id !== keepId);
+          const keep = students.find(s => s.id === keepId);
+          const others = ids.map(id => students.find(s => s.id === id)).filter(Boolean);
+          const moving = others.reduce((a, s) => a + countOf(s), 0);
+          if (!confirm(
+            `${keep.name} 학생을 ${keep.number != null ? keep.number + '번' : '번호없음'} 으로 합칠까요?\n\n` +
+            `· 사라지는 번호: ${others.map(s => s.number != null ? s.number + '번' : '번호없음').join(', ')}\n` +
+            `· 옮겨지는 응시 기록: ${moving}건\n\n` +
+            `동명이인이라면 합치면 안 됩니다. 되돌릴 수 없어요.`
+          )) return;
+          btn.disabled = true;
+          try {
+            let moved = 0;
+            for (const o of others) {
+              const { data, error } = await sb().rpc('merge_students', { p_keep: keepId, p_drop: o.id });
+              if (error) throw new Error(describeMergeError(error.message));
+              moved += (typeof data === 'number' ? data : 0);
+            }
+            await renderClassStudents(classId, box);
+            loadAllSubmissions();     // 결과·통계·분석 갱신
+            const m = box.querySelector('.rs-msg');
+            if (m) m.innerHTML = `<div class="msg success" style="margin-top:10px">합쳤어요. 응시 기록 ${moved}건을 옮겼습니다.</div>`;
+          } catch (err) {
+            btn.disabled = false;
+            alert('합치기 실패: ' + err.message);
+          }
+        });
+      });
+
       box.querySelectorAll('[data-edit-number]').forEach(btn => {
         btn.addEventListener('click', async (e) => {
           e.stopPropagation();
@@ -1371,13 +1580,20 @@
     btn.disabled = true; btn.textContent = '저장 중...';
     try {
       if (editingExamId) {
-        // 수정 모드: 문항/정답 변경은 제출자가 있으면 DB 트리거가 거부함(복제 유도).
-        const { error } = await sb().from('answer_keys').update({
-          class_id: $('#new-class-select').value || null,
-          subject, unit, count: questions.length, choices, questions
-        }).eq('id', editingExamId);
-        if (error) throw new Error(error.message);
-        $('#save-result').innerHTML = '<div class="msg success">정답지가 수정되었습니다.</div>';
+        // 수정 모드: 이미 제출된 응시가 있으면 새 정답으로 함께 재채점한다.
+        const res = await saveEditedExamWithRegrade(editingExamId, {
+          classId: $('#new-class-select').value || null, subject, unit, choices
+        }, questions);
+        if (res === null) {           // 사용자가 확인창에서 취소
+          btn.disabled = false;
+          btn.textContent = '수정 내용 저장';
+          return;
+        }
+        $('#save-result').innerHTML = res.regraded > 0
+          ? `<div class="msg success">정답지를 수정하고 응시 결과 ${res.regraded}건을 다시 채점했어요.`
+            + (res.moved ? ` 점수가 달라진 응시는 ${res.moved}건입니다.` : ' 점수가 달라진 응시는 없습니다.')
+            + '</div>'
+          : '<div class="msg success">정답지가 수정되었습니다.</div>';
         setExamFormMode(null);
       } else {
         // add_exam → answer_keys 직접 insert. RLS check(auth.uid()=teacher_id) 때문에 teacher_id 필수.
@@ -1393,7 +1609,8 @@
       $('#new-subject').value = ''; $('#new-unit').value = '';
       questionTypes = {}; renderAnswerInputs();
       loadAnswerKeys();
-      setTimeout(() => { $('#save-result').innerHTML = ''; }, 2500);
+      if (allSubmissions.length) loadAllSubmissions();   // 재채점 결과를 결과 탭에 바로 반영
+      setTimeout(() => { $('#save-result').innerHTML = ''; }, 6000);
     } catch (e) {
       $('#save-result').innerHTML = `<div class="msg error">${escapeHtml(e.message)}</div>`;
     } finally {
@@ -1402,12 +1619,278 @@
     }
   });
 
+  // ===== 채점 모듈 (교사 재채점 전용) =====
+  // supabase/functions/_shared/grading.js 를 글자 그대로 이식한 사본입니다.
+  // CLAUDE.md §2-1: 새로 짜지 말 것 — export 키워드만 떼고 본문은 동일합니다.
+  // 학생 제출 채점은 지금처럼 Edge Function(서버)에서만 수행하고,
+  // 이 사본은 교사가 정답지를 고쳤을 때 기존 제출물을 다시 채점하는 데만 씁니다.
+  // (교사는 이미 수동 정정으로 본인 응시 결과를 바꿀 수 있으므로 권한이 넓어지지 않습니다.)
+  const Grading = (function () {
+    function normalize_(s) {
+      if (s == null) return '';
+      return String(s).trim().toLowerCase().replace(/\s+/g, '').replace(/[.,!?'"·]/g, '');
+    }
+
+    function levenshtein_(a, b) {
+      if (a === b) return 0;
+      if (!a.length) return b.length;
+      if (!b.length) return a.length;
+      var dp = [];
+      for (var i = 0; i <= a.length; i++) dp.push(i);
+      for (var j = 1; j <= b.length; j++) {
+        var prev = dp[0]; dp[0] = j;
+        for (var i2 = 1; i2 <= a.length; i2++) {
+          var tmp = dp[i2];
+          dp[i2] = a[i2-1] === b[j-1] ? prev : Math.min(prev, dp[i2-1], dp[i2]) + 1;
+          prev = tmp;
+        }
+      }
+      return dp[a.length];
+    }
+
+    function isAmbiguous_(student, answers) {
+      if (!student || !answers || !answers.length) return false;
+      var s = normalize_(student);
+      if (!s) return false;
+      for (var i = 0; i < answers.length; i++) {
+        var na = normalize_(answers[i]);
+        if (!na || s === na) return false;
+        var dist = levenshtein_(s, na);
+        var maxLen = Math.max(s.length, na.length);
+        if (maxLen <= 4 && dist === 1) return true;
+        if (maxLen > 4 && dist / maxLen <= 0.3) return true;
+        if (s.indexOf(na) !== -1 || na.indexOf(s) !== -1) {
+          if (Math.abs(s.length - na.length) <= 3) return true;
+        }
+      }
+      return false;
+    }
+
+    function gradeMcMulti_(correctArr, studentAns) {
+      var correctSet = (correctArr || []).map(Number).filter(function(v){ return v > 0; })
+                                         .sort(function(a, b) { return a - b; });
+      if (correctSet.length === 0) return false;
+      var givenSet;
+      if (Array.isArray(studentAns)) {
+        givenSet = studentAns;
+      } else if (studentAns != null && studentAns !== '') {
+        givenSet = String(studentAns).split(',');
+      } else {
+        return false;
+      }
+      givenSet = givenSet.map(Number).filter(function(v){ return v > 0; })
+                         .sort(function(a, b) { return a - b; });
+      if (givenSet.length !== correctSet.length) return false;
+      for (var i = 0; i < correctSet.length; i++) {
+        if (correctSet[i] !== givenSet[i]) return false;
+      }
+      return true;
+    }
+
+    function toDisplay_(v) {
+      if (v == null) return '';
+      if (Array.isArray(v)) return v.join(',');
+      return String(v);
+    }
+
+    function gradeSubmission_(exam, answers) {
+      var questions = exam.questions || [];
+      var ansMap = {};
+      answers.forEach(function(a) { ansMap[a.q] = a.answer; });
+
+      var correct = 0;
+      var detail = [];
+      for (var i = 0; i < questions.length; i++) {
+        var q = questions[i];
+        var studentAns = ansMap[q.q];
+        var isCorrect = false;
+        var correctDisplay = '';
+        var needsReview = false;
+
+        if (q.type === 'mc') {
+          if (q.multi) {
+            var sortedAnswers = (q.answers || []).slice().map(Number).sort(function(a,b){return a-b;});
+            correctDisplay = sortedAnswers.join(',');
+            isCorrect = gradeMcMulti_(q.answers, studentAns);
+          } else {
+            correctDisplay = q.answer;
+            isCorrect = (studentAns != null && parseInt(studentAns) === parseInt(q.answer));
+          }
+        } else {
+          var correctAnswers = q.answers || [];
+          correctDisplay = correctAnswers.join(' / ');
+          if (studentAns) {
+            var norm = normalize_(studentAns);
+            isCorrect = correctAnswers.some(function(a) { return normalize_(a) === norm; });
+            if (!isCorrect) {
+              needsReview = isAmbiguous_(studentAns, correctAnswers);
+            }
+          }
+        }
+        if (isCorrect) correct++;
+        detail.push({
+          q: q.q,
+          type: q.type,
+          multi: !!q.multi,
+          student: toDisplay_(studentAns),
+          correct: toDisplay_(correctDisplay),
+          isCorrect: isCorrect,
+          needsReview: needsReview,
+          manualOverride: null
+        });
+      }
+      var score = questions.length > 0 ? Math.round((correct / questions.length) * 100) : 0;
+      return { count: questions.length, correct: correct, score: score, detail: detail };
+    }
+
+    return { normalize_, levenshtein_, isAmbiguous_, gradeMcMulti_, toDisplay_, gradeSubmission_ };
+  })();
+
+  // ===== 정답지 수정 → 기존 응시 재채점 =====
+  // 학생이 써낸 답안은 submissions.detail[].student 에 표시형으로 보존돼 있다.
+  //  - 객관식 단일: '3'      → gradeSubmission_ 이 parseInt 로 읽어 제출 당시와 동일
+  //  - 복수정답:    '1,3'    → gradeMcMulti_ 가 쉼표 문자열을 그대로 처리
+  //  - 주관식:      원문 문자열 그대로
+  //  - 무응답:      ''       → 제출 당시 undefined 와 같은 분기(falsy)
+  // 따라서 '같은 입력 → 같은 출력'이 유지된다 (regrade.roundtrip.test.js 로 검증).
+  function answersFromDetail(detail) {
+    return (detail || []).map(d => ({ q: d.q, answer: d.student }));
+  }
+
+  // 정답이 '실제로' 바뀐 문항 번호 — 유형 변경도 정답 변경으로 본다.
+  function changedQuestionNos(oldQs, newQs) {
+    const sig = q => q.type === 'mc'
+      ? (q.multi
+          ? 'M:' + (q.answers || []).map(Number).sort((a, b) => a - b).join(',')
+          : 'S:' + q.answer)
+      : 'T:' + (q.answers || []).join('|');
+    const before = {};
+    (oldQs || []).forEach(q => { before[q.q] = sig(q); });
+    const changed = new Set();
+    (newQs || []).forEach(q => { if (before[q.q] !== sig(q)) changed.add(q.q); });
+    return changed;
+  }
+
+  // 제출물 하나를 새 정답지로 다시 채점.
+  // 수동 정정(manualOverride)은 정답이 그대로인 문항만 유지하고, 바뀐 문항은 초기화한다
+  // (바뀐 문항의 정정은 '옛 정답 기준' 판단이라 그대로 두면 틀린 점수가 남는다).
+  function regradeDetail(sub, newQuestions, changed) {
+    const graded = Grading.gradeSubmission_({ questions: newQuestions }, answersFromDetail(sub.detail));
+    const prev = {};
+    (sub.detail || []).forEach(d => { prev[d.q] = d.manualOverride; });
+    graded.detail.forEach(d => {
+      d.manualOverride = (!changed.has(d.q) && prev[d.q] != null) ? prev[d.q] : null;
+    });
+    return graded.detail;
+  }
+
+  // detail 에 교사 정정을 반영한 실제 점수 (DB의 trg_recompute_submission 과 같은 규칙)
+  function scoreOfDetail(detail) {
+    const n = (detail || []).length;
+    if (!n) return 0;
+    const c = detail.filter(d => (d.manualOverride != null ? d.manualOverride : d.isCorrect)).length;
+    return Math.round(c / n * 100);
+  }
+
+  // 마이그레이션(20261118030000_answer_key_regrade.sql)을 아직 적용하지 않은 DB 대비.
+  // 그대로 두면 PostgREST 의 'function not found' 같은 암호 같은 문구만 보인다.
+  function describeRegradeError(msg) {
+    const m = String(msg || '');
+    if (/update_exam_and_regrade/i.test(m) || /PGRST202/i.test(m) || /Could not find the function/i.test(m)) {
+      return '재채점 기능이 아직 데이터베이스에 설치되지 않았어요. 터미널에서 `npx supabase db push` 를 한 번 실행한 뒤 다시 시도해 주세요.';
+    }
+    if (/재채점과 함께 수정해야/i.test(m)) {
+      return '정답만 따로 바꿀 수 없어요. 이 화면에서 저장하면 재채점까지 함께 처리됩니다. (DB 마이그레이션이 적용됐는지 확인해 주세요)';
+    }
+    return m;
+  }
+
+  // 수정 저장 시 호출. 제출물이 있으면 재채점까지 한 번에 처리한다.
+  async function saveEditedExamWithRegrade(examId, meta, questions) {
+    const { data: subs, error: sErr } = await sb().from('submissions')
+      .select('id, name, number, score, detail')
+      .eq('exam_id', examId);
+    if (sErr) throw new Error(sErr.message);
+    const list = subs || [];
+
+    // 제출물이 없으면 기존 경로 그대로 (자유롭게 수정)
+    if (list.length === 0) {
+      const { error } = await sb().from('answer_keys').update({
+        class_id: meta.classId, subject: meta.subject, unit: meta.unit,
+        count: questions.length, choices: meta.choices, questions
+      }).eq('id', examId);
+      if (error) throw new Error(error.message);
+      return { regraded: 0, changedCount: 0, moved: 0, delta: 0 };
+    }
+
+    const original = teacherExams.find(x => x.id === examId);
+    const oldQs = (original && original.questions) || [];
+    if (questions.length !== oldQs.length) {
+      throw new Error('이미 제출된 응시가 있어 문항 수(' + oldQs.length + '개)는 바꿀 수 없어요. 정답과 유형만 고칠 수 있습니다.');
+    }
+
+    const changed = changedQuestionNos(oldQs, questions);
+    if (changed.size === 0) {
+      // 정답이 그대로면 재채점할 것이 없다 — 메타만 수정
+      const { error } = await sb().from('answer_keys').update({
+        class_id: meta.classId, subject: meta.subject, unit: meta.unit
+      }).eq('id', examId);
+      if (error) throw new Error(error.message);
+      return { regraded: 0, changedCount: 0, moved: 0, delta: 0 };
+    }
+
+    const details = [];
+    let moved = 0, deltaSum = 0;
+    list.forEach(s => {
+      const nd = regradeDetail(s, questions, changed);
+      const before = typeof s.score === 'number' ? s.score : scoreOfDetail(s.detail);
+      const after = scoreOfDetail(nd);
+      if (after !== before) { moved++; deltaSum += (after - before); }
+      details.push({ id: s.id, detail: nd });
+    });
+
+    const qList = [...changed].sort((a, b) => a - b).join(', ');
+    const ok = confirm(
+      '정답을 고치면 이미 채점된 결과도 함께 다시 채점됩니다.\n\n' +
+      '· 바뀌는 문항: ' + changed.size + '개 (' + qList + '번)\n' +
+      '· 다시 채점할 응시: ' + list.length + '건\n' +
+      '· 그중 점수가 달라지는 응시: ' + moved + '건\n' +
+      (moved ? '· 점수 변동 합계: ' + (deltaSum > 0 ? '+' : '') + deltaSum + '점\n' : '') +
+      '\n정답이 바뀐 문항의 수동 정정(⭕/❌)은 초기화되고, 나머지 문항의 정정은 그대로 유지됩니다.\n' +
+      '되돌리려면 정답지를 원래대로 고쳐 다시 저장해야 합니다.\n\n진행할까요?'
+    );
+    if (!ok) return null;
+
+    const { data, error } = await sb().rpc('update_exam_and_regrade', {
+      p_exam_id: examId,
+      p_subject: meta.subject,
+      p_unit: meta.unit,
+      p_class_id: meta.classId,
+      p_choices: meta.choices,
+      p_questions: questions,
+      p_details: details
+    });
+    if (error) throw new Error(describeRegradeError(error.message));
+    return { regraded: typeof data === 'number' ? data : list.length, changedCount: changed.size, moved, delta: deltaSum };
+  }
+
   // ===== 정답지 복제/수정 =====
   let editingExamId = null;
-  function setExamFormMode(editId) {
+  function setExamFormMode(editId, submissionCount) {
     editingExamId = editId;
     $('#save-key-btn').textContent = editId ? '수정 내용 저장' : '정답지 저장';
     $('#cancel-edit-btn').style.display = editId ? '' : 'none';
+    $('#exam-form-title').textContent = editId ? '✏️ 정답지 수정' : '➕ 새 정답지 등록';
+    // 응시 기록이 있는 정답지는 문항 수를 바꿀 수 없다 (학생 답안 기록이 사라지므로)
+    const n = submissionCount || 0;
+    const lockCount = !!editId && n > 0;
+    const countInput = $('#new-count');
+    countInput.disabled = lockCount;
+    countInput.title = lockCount ? '이미 응시한 기록이 있어 문항 수는 바꿀 수 없어요' : '';
+    $('#exam-form-notice').innerHTML = !editId ? ''
+      : (lockCount
+          ? `<div class="msg info" style="margin:0 0 12px">이미 <strong>${n}건</strong>이 응시한 정답지예요. 정답을 고쳐 저장하면 그 ${n}건도 새 정답으로 <strong>다시 채점</strong>됩니다. 문항 수는 바꿀 수 없어요.</div>`
+          : '<div class="msg info" style="margin:0 0 12px">수정 모드예요. 아직 응시한 학생이 없어 자유롭게 고칠 수 있습니다.</div>');
   }
   $('#cancel-edit-btn').addEventListener('click', () => {
     setExamFormMode(null);
@@ -1512,16 +1995,18 @@
         btn.addEventListener('click', async () => {
           const exam = teacherExams.find(x => x.id === btn.dataset.edit);
           if (!exam) return;
+          let subCount = 0;
           try {
-            // 제출된 응시가 있으면 수정 불가 → 복제 안내 (DB 트리거로도 이중 차단됨)
-            const { data: sub, error } = await sb().from('submissions')
-              .select('id').eq('exam_id', exam.id).limit(1).maybeSingle();
+            // 제출된 응시 수를 먼저 센다 — 있으면 문항 수는 잠그고, 저장 시 함께 재채점한다.
+            const { count, error } = await sb().from('submissions')
+              .select('id', { count: 'exact', head: true }).eq('exam_id', exam.id);
             if (error) throw new Error(error.message);
-            if (sub) { alert('이미 제출된 응시가 있어 문항/정답을 수정할 수 없어요.\n[복제]로 새 정답지를 만들어 주세요.'); return; }
+            subCount = count || 0;
           } catch (e) { alert('확인 실패: ' + e.message); return; }
           fillExamForm(exam);
-          setExamFormMode(exam.id);
-          $('#save-result').innerHTML = '<div class="msg info">수정 모드예요. 내용을 고친 뒤 [수정 내용 저장]을 누르세요.</div>';
+          setExamFormMode(exam.id, subCount);
+          $('#save-result').innerHTML = '';
+          $('#exam-form-title').scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
       });
     } catch (e) {

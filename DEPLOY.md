@@ -27,7 +27,7 @@ git clone -b claude/grading-refactor-golden-master-enp7dy https://github.com/Gi-
 cd exam
 npx supabase login                 # 브라우저가 열리며 로그인
 npx supabase link --project-ref <프로젝트ref>   # URL 의 abcdefgh 부분
-npx supabase db push               # 마이그레이션 5개 적용 (테이블/RLS/함수/트리거)
+npx supabase db push               # 마이그레이션 전체 적용 (테이블/RLS/함수/트리거)
 npx supabase functions deploy register_teacher
 npx supabase functions deploy submit_for_student
 ```
@@ -88,3 +88,47 @@ window.SUPABASE_ANON_KEY = "eyJ...(anon public 키)";
 | "반 목록을 불러오지 못했어요" | `db push` 누락 또는 URL/키 오타 → 4단계 값 재확인 |
 | 학교 이름이 안 나옴 | 3단계 SQL 미실행 |
 | 학생이 PIN 분실 | 교사 → 반 관리 → 학생 명단 → [PIN 초기화] |
+
+---
+
+## 이미 운영 중인데 기능이 추가됐을 때
+
+**`setup_all.sql` 로 설치하셨다면** (SQL Editor 붙여넣기 방식) — Docker·CLI·git 모두 필요 없습니다.
+Supabase 대시보드 → **SQL Editor** → `supabase/setup_update_<날짜>.sql` 전체를 붙여넣고 **Run** 한 번.
+전부 `create or replace` 라서 여러 번 실행해도 안전합니다.
+
+> ⚠ `npx supabase db push` 는 CLI 로 설치한 프로젝트에서만 쓰세요.
+> SQL Editor 로 설치한 프로젝트는 마이그레이션 기록이 비어 있어서, `db push` 가
+> **처음부터 전부 다시 적용하려다 실패**합니다. 또 `link` 하지 않으면 로컬 Docker 를
+> 보기 때문에 `connect ECONNREFUSED 127.0.0.1:54322` 가 납니다.
+
+**CLI 로 설치하셨다면:**
+
+```bash
+git pull
+npx supabase db push
+```
+
+기능별로 필요한 작업:
+
+| 기능 | 필요한 것 |
+|---|---|
+| 정답지 수정 → 기존 응시 재채점 | `npx supabase db push` (마이그레이션 `20261118030000_answer_key_regrade.sql`) |
+| 학생 명단 선등록 + 갈라진 학생 합치기 | `npx supabase db push` (마이그레이션 `20261118060000_roster_first_entry.sql`) |
+
+위 두 가지는 `supabase/setup_update_20261118.sql` 하나로 합쳐 두었습니다 (SQL Editor 붙여넣기용).
+
+> Edge Function 을 고친 게 아니라면 `functions deploy` 는 다시 할 필요가 없습니다.
+> 프론트엔드(`index.html`)는 GitHub Pages 가 자동 배포하므로 따로 할 일이 없습니다.
+
+### 학생 등록 방식이 바뀌었습니다 (2026-11-18)
+
+예전에는 학생이 입장할 때 번호를 직접 입력하면 **그 번호로 자동 등록**됐습니다.
+그래서 번호를 잘못 누르면 같은 학생이 다른 학생으로 갈라졌습니다.
+
+이제는 **교사가 반 관리에서 명단(번호·이름)을 먼저 등록**하고, 학생은 등록된 번호로만
+입장합니다. 번호에 등록된 이름과 다른 이름을 넣어도 거절됩니다.
+
+> ⚠ 마이그레이션 적용 후 **새로 만든 반은 명단을 등록하기 전까지 학생이 입장할 수 없습니다.**
+> 이미 등록돼 있던 학생은 그대로 입장되니 기존 반은 영향받지 않습니다.
+> 이미 갈라진 기록은 반 관리 화면의 **[이 번호로 합치기]** 로 정리하세요.

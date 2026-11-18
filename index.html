@@ -269,6 +269,30 @@
   .filter-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px; background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--r-lg); margin-bottom: 12px; box-shadow: var(--shadow-sm); }
   .filter-bar select { flex: 1 1 130px; min-width: 110px; width: auto; padding: 8px 10px; font-size: 13px; }
   .filter-bar .spacer { flex: 1 1 0; min-width: 0; }
+  /* 반 관리: 학생 명단 등록 · 합치기 */
+  .roster-add { background: var(--surface-2); border: 1px solid var(--hairline-soft); border-radius: var(--r-md); padding: 12px; margin-bottom: 12px; }
+  .roster-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .roster-row .rs-num { width: 90px; flex: 0 0 90px; }
+  .roster-row .rs-name { flex: 1 1 140px; min-width: 120px; width: auto; }
+  textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--hairline); border-radius: var(--r-md); font-size: 13px; background: var(--surface); color: var(--ink); font-family: inherit; line-height: 1.6; resize: vertical; }
+  textarea:focus { outline: none; border-color: var(--ink); box-shadow: 0 0 0 3px var(--focus-ring); }
+  .rs-bulk { margin-top: 10px; }
+  .student-row { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid var(--hairline-soft); font-size: 13px; gap: 6px; flex-wrap: wrap; }
+  .student-row:last-child { border-bottom: none; }
+  .student-meta { font-size: 11px; color: var(--ink-muted); margin-left: 4px; font-variant-numeric: tabular-nums; }
+  .pin-set { font-size: 11px; color: var(--good-ink); margin-left: 4px; }
+  .pin-unset { font-size: 11px; color: var(--critical-ink); margin-left: 4px; }
+  .dupe-wrap { background: var(--warning-bg); border: 1px solid var(--alert-border); border-radius: var(--r-md); padding: 12px; margin-bottom: 12px; }
+  .dupe-head { font-size: 13px; font-weight: 700; color: var(--warning-ink); margin-bottom: 6px; }
+  .dupe-group { padding: 8px 0; border-top: 1px solid var(--alert-border); }
+  .dupe-name { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .dupe-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .dupe-chip { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--r-sm); padding: 7px 11px; font-family: inherit; font-size: 12px; color: var(--ink); cursor: pointer; transition: border-color .15s, background .15s; }
+  .dupe-chip:hover:not(:disabled) { border-color: var(--warning-ink); background: var(--surface-2); }
+  .dupe-chip:disabled { opacity: .5; cursor: progress; }
+  .dupe-chip span { font-size: 11px; color: var(--ink-muted); }
+  .dupe-chip .dupe-cta { color: var(--info-ink); font-weight: 600; }
+
   .filter-note { font-size: 11px; color: var(--ink-muted); flex: 1 1 100%; margin: 0; line-height: 1.4; }
   .toolbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .toolbar-label { font-size: 12px; color: var(--ink-2); }
@@ -532,7 +556,7 @@
 <div id="student-login" style="display:none">
   <div class="card">
     <p class="section-title">✏️ 학생 응시</p>
-    <p class="hint-text" style="margin-bottom:12px">선생님이 알려주신 코드를 입력하고 반을 선택하세요.</p>
+    <p class="hint-text" style="margin-bottom:12px">선생님이 알려주신 <strong>코드·반·번호</strong>로 입장해요. 번호가 안 맞으면 입장되지 않으니 선생님께 확인하세요.</p>
     <div class="row">
       <div>
         <label class="field-label">선생님 코드</label>
@@ -606,7 +630,7 @@
   <div class="panel" id="panel-classes">
     <div class="card">
       <p class="section-title">➕ 새 반 만들기</p>
-      <p class="hint-text" style="margin-bottom:10px">학생이 응시하려면 반이 최소 1개 필요해요. 예: <code>2026 3학년 2반</code>, <code>1학기 과학반</code> — 연도별로 반을 새로 만들면 기록이 누적 관리돼요.</p>
+      <p class="hint-text" style="margin-bottom:10px">학생이 응시하려면 반이 최소 1개 필요해요. 예: <code>2026 3학년 2반</code>, <code>1학기 과학반</code> — 연도별로 반을 새로 만들면 기록이 누적 관리돼요. 반을 만든 뒤 <strong>아래 목록에서 반을 눌러 학생 명단을 등록</strong>하세요.</p>
       <div class="row">
         <div><label class="field-label">반 이름</label><input type="text" id="new-class-name" placeholder="예: 2026 3학년 2반" /></div>
         <div style="flex:0 0 auto;align-self:flex-end"><button class="btn-primary" id="add-class-btn" type="button">반 추가</button></div>
@@ -615,7 +639,7 @@
     </div>
     <div class="card">
       <p class="section-title">🏫 내 반 목록</p>
-      <p class="hint-text" style="margin-bottom:10px">반 이름을 누르면 학생 명단이 열려요. 학생이 PIN을 잊었으면 <strong>[PIN 초기화]</strong> — 다음 입장 때 새 PIN을 스스로 설정해요.</p>
+      <p class="hint-text" style="margin-bottom:10px">반 이름을 누르면 학생 명단이 열려요. <strong>먼저 명단(번호·이름)을 등록</strong>한 뒤 학생에게 코드와 번호를 알려주세요. 등록된 번호로만 입장할 수 있어요. PIN을 잊었으면 <strong>[PIN 초기화]</strong> — 다음 입장 때 새 PIN을 스스로 정합니다.</p>
       <div id="classes-list"><div class="loading">불러오는 중...</div></div>
     </div>
   </div>
@@ -1117,28 +1141,211 @@
     });
   }
 
+  // 마이그레이션(20261118060000_roster_first_entry.sql) 미적용 DB 대비
+  function describeMergeError(msg) {
+    const m = String(msg || '');
+    if (/merge_students/i.test(m) || /PGRST202/i.test(m) || /Could not find the function/i.test(m)) {
+      return '학생 합치기 기능이 아직 데이터베이스에 설치되지 않았어요. 터미널에서 `npx supabase db push` 를 한 번 실행한 뒤 다시 시도해 주세요.';
+    }
+    return m;
+  }
+
+  // 이름 비교 정규화 — DB의 public.normalize_name 과 같은 규칙(공백 제거 + 소문자)
+  function normName(n) { return String(n == null ? '' : n).replace(/\s+/g, '').toLowerCase(); }
+
+  // "3 김철수" / "3,김철수" / "3\t김철수" 한 줄을 {number, name} 으로.
+  // 번호가 앞에 없으면 null 을 돌려 호출부가 줄 번호와 함께 알려준다.
+  function parseRosterLine(line) {
+    const t = String(line || '').trim();
+    if (!t) return null;
+    const m = t.match(/^(\d{1,3})\s*[.,\t|]?\s*(.+)$/);
+    if (!m) return null;
+    const number = parseInt(m[1], 10);
+    const name = m[2].trim();
+    if (!(number >= 1 && number <= 999) || !name || name.length > 50) return null;
+    return { number, name };
+  }
+
   async function renderClassStudents(classId, box) {
     box.innerHTML = '<div class="loading">학생 명단 불러오는 중...</div>';
     try {
       // RLS 로 본인 학생만. pin_hash 값 자체는 해시라 노출돼도 원문 PIN 은 알 수 없음.
-      const { data, error } = await sb().from('students')
-        .select('id, name, number, pin_hash, createdAt:created_at').eq('class_id', classId)
-        .order('number', { ascending: true, nullsFirst: false });
-      if (error) throw new Error(error.message);
-      const students = data || [];
-      if (students.length === 0) {
-        box.innerHTML = '<div class="empty" style="padding:8px">아직 입장한 학생이 없어요. (학생이 처음 입장할 때 자동 등록돼요)</div>';
-        return;
+      const [stRes, subRes] = await Promise.all([
+        sb().from('students')
+          .select('id, name, number, pin_hash, createdAt:created_at').eq('class_id', classId)
+          .order('number', { ascending: true, nullsFirst: false }),
+        sb().from('submissions').select('id, student_id, number').eq('class_id', classId)
+      ]);
+      if (stRes.error) throw new Error(stRes.error.message);
+      if (subRes.error) throw new Error(subRes.error.message);
+      const students = stRes.data || [];
+      const subs = subRes.data || [];
+
+      // 응시 수 집계: 학생 연결이 있으면 그걸로, 없으면 번호로 (옛 기록)
+      const byStudent = {}, byNumber = {};
+      subs.forEach(s => {
+        if (s.student_id) byStudent[s.student_id] = (byStudent[s.student_id] || 0) + 1;
+        else if (s.number != null) byNumber[s.number] = (byNumber[s.number] || 0) + 1;
+      });
+      const countOf = st => (byStudent[st.id] || 0) + (st.number != null ? (byNumber[st.number] || 0) : 0);
+
+      // 같은 이름이 여러 번호로 등록된 묶음 = 번호를 다르게 입력해 갈라졌을 가능성
+      const groups = {};
+      students.forEach(st => { (groups[normName(st.name)] = groups[normName(st.name)] || []).push(st); });
+      const dupes = Object.keys(groups).map(k => groups[k]).filter(g => g.length > 1);
+
+      const addForm = `
+        <div class="roster-add">
+          <div class="roster-row">
+            <input type="number" class="rs-num" placeholder="번호" min="1" max="999" inputmode="numeric" aria-label="번호" />
+            <input type="text" class="rs-name" placeholder="이름" aria-label="이름" />
+            <button class="btn-primary rs-add" type="button">학생 추가</button>
+            <button class="btn-secondary rs-bulk-toggle" type="button">명단 한번에 붙여넣기</button>
+          </div>
+          <div class="rs-bulk" style="display:none">
+            <textarea class="rs-bulk-text" rows="6" placeholder="한 줄에 한 명씩 — 번호 다음에 이름&#10;1 김철수&#10;2 이영희&#10;3, 박민수"></textarea>
+            <div style="margin-top:8px">
+              <button class="btn-primary rs-bulk-save" type="button">명단 등록</button>
+              <span class="hint-text" style="margin-left:8px">엑셀에서 두 칸(번호·이름)을 복사해 붙여넣어도 됩니다.</span>
+            </div>
+          </div>
+          <div class="rs-msg"></div>
+        </div>`;
+
+      const dupeBlock = dupes.length === 0 ? '' : `
+        <div class="dupe-wrap">
+          <div class="dupe-head">⚠ 같은 이름이 여러 번호로 등록돼 있어요</div>
+          <div class="hint-text" style="margin:0 0 10px">
+            학생이 입장할 때 번호를 다르게 입력하면 다른 학생으로 등록됩니다.
+            같은 학생이라면 <strong>남길 번호</strong>를 눌러 하나로 합치세요. 응시 기록도 함께 옮겨집니다.
+            동명이인이라면 그대로 두세요.
+          </div>
+          ${dupes.map(g => `
+            <div class="dupe-group">
+              <div class="dupe-name">👧 ${escapeHtml(g[0].name)}</div>
+              <div class="dupe-chips">
+                ${g.map(st => `
+                  <button class="dupe-chip" type="button" data-merge-keep="${escapeHtml(st.id)}"
+                          data-group="${escapeHtml(g.map(x => x.id).join(','))}">
+                    <strong>${st.number != null ? escapeHtml(String(st.number)) + '번' : '번호없음'}</strong>
+                    <span>응시 ${countOf(st)}건</span>
+                    <span class="dupe-cta">이 번호로 합치기</span>
+                  </button>`).join('')}
+              </div>
+            </div>`).join('')}
+        </div>`;
+
+      const listHtml = students.length === 0
+        ? `<div class="empty" style="padding:10px">아직 등록된 학생이 없어요. 위에서 번호와 이름을 등록해 주세요.<br><span class="hint-text">등록된 번호로만 학생이 입장할 수 있습니다.</span></div>`
+        : students.map(st => `
+            <div class="student-row">
+              <span>👧 <strong>${st.number != null ? escapeHtml(String(st.number)) + '번' : '번호없음'}</strong>
+                ${escapeHtml(st.name)}
+                <span class="student-meta">응시 ${countOf(st)}건</span>
+                <span class="${st.pin_hash ? 'pin-set' : 'pin-unset'}">${st.pin_hash ? 'PIN 설정됨' : 'PIN 미설정 (첫 입장 때 학생이 정함)'}</span>
+              </span>
+              <span>
+                <button class="btn-secondary" data-edit-number="${escapeHtml(st.id)}" data-cur-number="${st.number != null ? escapeHtml(String(st.number)) : ''}" type="button" style="font-size:11px;padding:4px 8px">번호 수정</button>
+                <button class="btn-secondary" data-reset-pin="${escapeHtml(st.id)}" type="button" style="font-size:11px;padding:4px 8px;margin-left:4px">PIN 초기화</button>
+                <button class="btn-danger" data-del-student="${escapeHtml(st.id)}" type="button" style="font-size:11px;padding:4px 8px;margin-left:4px">삭제</button>
+              </span>
+            </div>`).join('');
+
+      box.innerHTML = addForm + dupeBlock + listHtml;
+
+      const msgEl = box.querySelector('.rs-msg');
+      const showMsg = (cls, html) => { msgEl.innerHTML = `<div class="msg ${cls}" style="margin-top:10px">${html}</div>`; };
+
+      // --- 학생 등록 (단건) ---
+      async function addStudents(rows) {
+        const taken = {};
+        students.forEach(st => { if (st.number != null) taken[st.number] = st.name; });
+        const dup = rows.filter(r => taken[r.number] != null);
+        if (dup.length) {
+          showMsg('error', `이미 쓰고 있는 번호예요: ${dup.map(r => `${r.number}번(${escapeHtml(taken[r.number])})`).join(', ')}`);
+          return false;
+        }
+        const seen = {};
+        for (const r of rows) {
+          if (seen[r.number]) { showMsg('error', `붙여넣은 명단 안에 ${r.number}번이 두 번 있어요.`); return false; }
+          seen[r.number] = true;
+        }
+        const { error } = await sb().from('students').insert(
+          rows.map(r => ({ class_id: classId, teacher_id: session.teacherId, name: r.name, number: r.number }))
+        );
+        if (error) throw new Error(error.message);
+        return true;
       }
-      box.innerHTML = students.map(s => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-bottom:1px solid #eee;font-size:13px;gap:6px;flex-wrap:wrap">
-          <span>👧 <strong>${s.number != null ? escapeHtml(String(s.number)) + '번' : '번호없음'}</strong> ${escapeHtml(s.name)} <span style="font-size:11px;color:${s.pin_hash ? '#3b6d11' : '#a32d2d'}">${s.pin_hash ? 'PIN 설정됨' : 'PIN 미설정 (다음 입장 때 새로 설정)'}</span></span>
-          <span>
-            <button class="btn-secondary" data-edit-number="${escapeHtml(s.id)}" data-cur-number="${s.number != null ? escapeHtml(String(s.number)) : ''}" type="button" style="font-size:11px;padding:4px 8px">번호 수정</button>
-            <button class="btn-secondary" data-reset-pin="${escapeHtml(s.id)}" type="button" style="font-size:11px;padding:4px 8px;margin-left:4px">PIN 초기화</button>
-            <button class="btn-danger" data-del-student="${escapeHtml(s.id)}" type="button" style="font-size:11px;padding:4px 8px;margin-left:4px">삭제</button>
-          </span>
-        </div>`).join('');
+
+      box.querySelector('.rs-add').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const numEl = box.querySelector('.rs-num'), nameEl = box.querySelector('.rs-name');
+        const number = parseInt(numEl.value, 10);
+        const name = nameEl.value.trim();
+        if (!(number >= 1 && number <= 999)) { showMsg('error', '번호는 1~999 사이 숫자로 입력해주세요.'); return; }
+        if (!name) { showMsg('error', '이름을 입력해주세요.'); return; }
+        try {
+          if (await addStudents([{ number, name }])) renderClassStudents(classId, box);
+        } catch (err) { showMsg('error', escapeHtml(err.message)); }
+      });
+
+      // --- 학생 등록 (명단 일괄) ---
+      box.querySelector('.rs-bulk-toggle').addEventListener('click', (e) => {
+        e.stopPropagation();
+        const w = box.querySelector('.rs-bulk');
+        w.style.display = w.style.display === 'none' ? '' : 'none';
+      });
+      box.querySelector('.rs-bulk-save').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const lines = box.querySelector('.rs-bulk-text').value.split('\n');
+        const rows = [], bad = [];
+        lines.forEach((l, i) => {
+          if (!String(l).trim()) return;
+          const r = parseRosterLine(l);
+          if (r) rows.push(r); else bad.push(i + 1);
+        });
+        if (bad.length) { showMsg('error', `${bad.join(', ')}번째 줄을 읽지 못했어요. "번호 이름" 형식인지 확인해 주세요.`); return; }
+        if (rows.length === 0) { showMsg('error', '등록할 명단이 비어 있어요.'); return; }
+        if (!confirm(`${rows.length}명을 등록할까요?\n\n` + rows.slice(0, 5).map(r => `${r.number}번 ${r.name}`).join('\n') + (rows.length > 5 ? `\n… 외 ${rows.length - 5}명` : ''))) return;
+        try {
+          if (await addStudents(rows)) renderClassStudents(classId, box);
+        } catch (err) { showMsg('error', escapeHtml(err.message)); }
+      });
+
+      // --- 갈라진 학생 합치기 ---
+      box.querySelectorAll('[data-merge-keep]').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const keepId = btn.dataset.mergeKeep;
+          const ids = btn.dataset.group.split(',').filter(id => id !== keepId);
+          const keep = students.find(s => s.id === keepId);
+          const others = ids.map(id => students.find(s => s.id === id)).filter(Boolean);
+          const moving = others.reduce((a, s) => a + countOf(s), 0);
+          if (!confirm(
+            `${keep.name} 학생을 ${keep.number != null ? keep.number + '번' : '번호없음'} 으로 합칠까요?\n\n` +
+            `· 사라지는 번호: ${others.map(s => s.number != null ? s.number + '번' : '번호없음').join(', ')}\n` +
+            `· 옮겨지는 응시 기록: ${moving}건\n\n` +
+            `동명이인이라면 합치면 안 됩니다. 되돌릴 수 없어요.`
+          )) return;
+          btn.disabled = true;
+          try {
+            let moved = 0;
+            for (const o of others) {
+              const { data, error } = await sb().rpc('merge_students', { p_keep: keepId, p_drop: o.id });
+              if (error) throw new Error(describeMergeError(error.message));
+              moved += (typeof data === 'number' ? data : 0);
+            }
+            await renderClassStudents(classId, box);
+            loadAllSubmissions();     // 결과·통계·분석 갱신
+            const m = box.querySelector('.rs-msg');
+            if (m) m.innerHTML = `<div class="msg success" style="margin-top:10px">합쳤어요. 응시 기록 ${moved}건을 옮겼습니다.</div>`;
+          } catch (err) {
+            btn.disabled = false;
+            alert('합치기 실패: ' + err.message);
+          }
+        });
+      });
+
       box.querySelectorAll('[data-edit-number]').forEach(btn => {
         btn.addEventListener('click', async (e) => {
           e.stopPropagation();
